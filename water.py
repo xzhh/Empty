@@ -36,12 +36,12 @@ from espressopp.tools import timers
 # This example reads in a gromacs water system (SPC/Fw) treated with reaction field. See the corresponding gromacs grompp.mdp paramter file.
 # Output of gromacs energies and esp energies should be the same
 
-def computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes, num_types):
+def computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes):
     list_t = []
     M_PI = 3.1415926535897932384626433832795029
     type_end = []
     type_end.append(0)
-    for k in range(num_types):
+    for k in range(len(atomtypes)):
         for pid in range(num_particles):
             if types[pid]==k:
                 list_t.append(pid+1)
@@ -248,7 +248,7 @@ end_time = time.process_time()
 timers.show(integrator.getTimers(), precision=2)
 
 # compute partial RDF for selected type-type pairs
-computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes, num_types)
+computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes)
 
 sys.stdout.write('Integration steps = %d\n' % integrator.step)
 sys.stdout.write('CPU time = %.1f\n' % (end_time - start_time))
