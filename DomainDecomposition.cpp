@@ -191,7 +191,7 @@ void DomainDecomposition::scaleVolume(real s, bool particleCoordinates)
         }
         else
         {
-            cellAdjust();
+            cellAdjust(false);
         }
     }
     else
@@ -226,7 +226,7 @@ void DomainDecomposition::scaleVolume(Real3D s, bool particleCoordinates)
             err.setException(msg.str());
         }
         else
-            cellAdjust();
+            cellAdjust(false);
     }
     else
     {
