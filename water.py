@@ -101,8 +101,8 @@ def computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomt
             vol_tmp=4.0/3.0*M_PI*pow(rad_tmp,3)
             rho_j*=1.0-1.0/vol_tmp
         
-        typeI=str(atomtypes.keys()[atomtypes.values().index(idx)])
-        typeJ=str(atomtypes.keys()[atomtypes.values().index(jdx)])
+        typeI=str(list(atomtypes.keys())[list(atomtypes.values()).index(idx)])
+        typeJ=str(list(atomtypes.keys())[list(atomtypes.values()).index(jdx)])
         filename="rdf."+typeI+"-"+typeJ+".dat"
         out_stream = open(filename, 'w')
         for i in range(rdf_bin):
