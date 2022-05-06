@@ -36,7 +36,7 @@ from espressopp.tools import timers
 # This example reads in a gromacs water system (SPC/Fw) treated with reaction field. See the corresponding gromacs grompp.mdp paramter file.
 # Output of gromacs energies and esp energies should be the same
 
-def computeRDF(system, rdf_pair, num_particles, Lx, Ly, Lz, types, atomtypes, num_types):
+def computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes, num_types):
     list_t = []
     M_PI = 3.1415926535897932384626433832795029
     type_end = []
@@ -114,8 +114,8 @@ def computeRDF(system, rdf_pair, num_particles, Lx, Ly, Lz, types, atomtypes, nu
       
 
 # simulation parameters (nvt = False is nve)
-steps = 10000
-check = steps/100
+steps = 100
+check = steps/10
 rc    = 0.9  # Verlet list cutoff
 skin  = 0.03
 timestep = 0.0005
@@ -248,10 +248,7 @@ end_time = time.process_time()
 timers.show(integrator.getTimers(), precision=2)
 
 # compute partial RDF for selected type-type pairs
-os.system("mkdir -p rdf_data")
-#out_energy = open("out/energy.dat", 'w')
-#out_energy.write(' step T P Pxx Pyy Pzz Pxy Pxz Pyz etotal ekinetic epair ecoul ebond eangle edihedral\n')
-#out_energy.write(str(0) + " " + str(T/constants.k/constants.N_A*1000) + " " +  str(P) + " " +  str(Pij[0]) + " " +  str(Pij[1]) + " " +  
+computeRDF(system, rdf_pair, rdf_dr, num_particles, Lx, Ly, Lz, types, atomtypes, num_types)
 
 sys.stdout.write('Integration steps = %d\n' % integrator.step)
 sys.stdout.write('CPU time = %.1f\n' % (end_time - start_time))
