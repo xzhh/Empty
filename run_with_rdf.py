@@ -474,6 +474,8 @@ for step in range(prod_nloops+1):
       pos.gather()
       
     if bool_ori:
+	  print("DON'T USE: shearOffset errors")
+	  sys.exit(0)
       monomers_per_residue=4
       for j in range(1,1024+1):
         mono_idx=(j-1)%monomers_per_residue
@@ -542,18 +544,20 @@ for step in range(prod_nloops+1):
                     jdx=list_t[j]
                     if idx!=jdx:
                         l=pos[0][jdx]-pos[0][idx]
-                        if l[0]<-Lx/2.0:
-                          l[0]+=Lx
-                        elif l[0]>Lx/2.0:
-                          l[0]-=Lx
+                        if l[2]<-Lz/2.0:
+                          l[2]+=Lz
+                          l[0]+=system.shearOffset
+                        elif l[2]>Lz/2.0:
+                          l[2]-=Lz
+                          l[0]-=system.shearOffset
                         if l[1]<-Ly/2.0:
                           l[1]+=Ly
                         elif l[1]>Ly/2.0:
                           l[1]-=Ly
-                        if l[2]<-Lz/2.0:
-                          l[2]+=Lz
-                        elif l[2]>Lz/2.0:
-                          l[2]-=Lz
+                        if l[0]<-Lx/2.0:
+						  while l[0]<-Lx/2.0: l[0]+=Lx
+                        elif l[0]>Lx/2.0:
+                          while l[0]>Lx/2.0: l[0]-=Lx
                         
                         dist=l.abs()
                         bin_index=int(dist/rdf_dr);

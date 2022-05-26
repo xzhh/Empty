@@ -94,7 +94,6 @@ random.seed( ((tseed & 0xff000000) >> 24) +
              ((tseed & 0x000000ff) << 24)   )
 irand=random.randint(1,99999)
 
-
 system = espressopp.System()
 system.rng = espressopp.esutil.RNG()
 system.rng.seed(irand)
@@ -590,24 +589,28 @@ if not skipPPA:
     for j in range(1,monomers_per_chain):
       jj=monomers_per_chain*i+j
       l=conf[0][jj+1]-conf[0][jj]
-      if l[0]<-Lx/2.0:
-        dim[0]+=1
-        l[0]+=Lx
-      elif l[0]>Lx/2.0:
-        dim[0]-=1
-        l[0]-=Lx
+      if l[2]<-Lz/2.0:
+        dim[2]+=1
+        l[2]+=Lz
+        l[0]+=system.shearOffset
+      elif l[2]>Lz/2.0:
+        dim[2]-=1
+        l[2]-=Lz
+        l[0]-=system.shearOffset
       if l[1]<-Ly/2.0:
         dim[1]+=1
         l[1]+=Ly
       elif l[1]>Ly/2.0:
         dim[1]-=1
         l[1]-=Ly
-      if l[2]<-Lz/2.0:
-        dim[2]+=1
-        l[2]+=Lz
-      elif l[2]>Lz/2.0:
-        dim[2]-=1
-        l[2]-=Lz
+      if l[0]<-Lx/2.0:
+        while l[0]<-Lx/2.0:
+          dim[0]+=1
+          l[0]+=Lx
+      elif l[0]>Lx/2.0:
+        while l[0]>Lx/2.0:
+          dim[0]-=1
+          l[0]-=Lx
       lsum+=l.abs()
       coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
       coor[0][0]+=coor[j+1][0]
