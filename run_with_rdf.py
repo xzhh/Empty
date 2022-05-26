@@ -474,8 +474,8 @@ for step in range(prod_nloops+1):
       pos.gather()
       
     if bool_ori:
-	  print("DON'T USE: shearOffset errors")
-	  sys.exit(0)
+      print("DON'T USE: shearOffset errors")
+      sys.exit(0)
       monomers_per_residue=4
       for j in range(1,1024+1):
         mono_idx=(j-1)%monomers_per_residue
@@ -555,7 +555,7 @@ for step in range(prod_nloops+1):
                         elif l[1]>Ly/2.0:
                           l[1]-=Ly
                         if l[0]<-Lx/2.0:
-						  while l[0]<-Lx/2.0: l[0]+=Lx
+                          while l[0]<-Lx/2.0: l[0]+=Lx
                         elif l[0]>Lx/2.0:
                           while l[0]>Lx/2.0: l[0]-=Lx
                         
