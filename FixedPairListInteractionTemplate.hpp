@@ -170,6 +170,14 @@ inline void FixedPairListInteractionTemplate<_Potential>::addForces()
                     getSystemRef().dyadicP_zx += dist[2] * force[0];
                 }
             }
+//std::cout<<"FIXP> "<<getSystemRef().ghostShift<<" \n";
+if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL && getSystemRef().shearOffset>0.7){
+int md_step=int(0.5+getSystemRef().shearOffset/Lz/getSystemRef().shearRate/0.002);
+if (p1.id()==atoi(getenv("VAR1"))||p2.id()==atoi(getenv("VAR1")))
+std::cout<<"BD> STEP-"<<md_step<<" | "<<p1.id()<<" ["<<p1.position()<<"] "
+<<p2.id()<<" ["<<p2.position()<<"] "
+<<sqrt(dist * dist)<<" "<<force.abs()<<" \n";
+}
         }
     }
     else

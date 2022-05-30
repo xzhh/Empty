@@ -399,6 +399,8 @@ for step in range(prod_nloops+1):
       
       #collect end-to-end orientation (normailized)
       if not skipOri:
+		print("Current Ori is wrong(shearOffset)")
+		sys.exit(0)
         mono_idx=(j-1)%monomers_per_chain
         chain_idx=(j-1-mono_idx)/monomers_per_chain
         if chain_idx<nc_print:
@@ -578,13 +580,14 @@ if not skipPPA:
   cnt=0
   clen=[]
   diam=[]
+  rlen=[]
   for i in range(num_chains):
     dim=[0,0,0]
     lsum=0
-    coor=[]
+    #coor=[]
     jj=monomers_per_chain*i+1
-    coor.append(conf[0][jj])
-    coor.append(conf[0][jj])
+    #coor.append(conf[0][jj])
+    #coor.append(conf[0][jj])
   
     for j in range(1,monomers_per_chain):
       jj=monomers_per_chain*i+j
@@ -612,29 +615,30 @@ if not skipPPA:
           dim[0]-=1
           l[0]-=Lx
       lsum+=l.abs()
-      coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
-      coor[0][0]+=coor[j+1][0]
-      coor[0][1]+=coor[j+1][1]
-      coor[0][2]+=coor[j+1][2]
+      #coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
+      #coor[0][0]+=coor[j+1][0]
+      #coor[0][1]+=coor[j+1][1]
+      #coor[0][2]+=coor[j+1][2]
     clen.append(lsum)
     
-    coor[0][0]/=monomers_per_chain
-    coor[0][1]/=monomers_per_chain
-    coor[0][2]/=monomers_per_chain
-    #print "COOR> ",i,coor
+    #coor[0][0]/=monomers_per_chain
+    #coor[0][1]/=monomers_per_chain
+    #coor[0][2]/=monomers_per_chain
+    ##print "COOR> ",i,coor
     
-    maxd=0
-    for j in range(1,monomers_per_chain):
-      dtmp=coor[j]-coor[0]
-      if (dtmp.abs()>maxd):
-        maxd=dtmp.abs()
+    #maxd=0
+    #for j in range(1,monomers_per_chain):
+    #  dtmp=coor[j]-coor[0]
+    #  if (dtmp.abs()>maxd):
+    #    maxd=dtmp.abs()
     #diam.append(maxd*2.0)
     
-    rlen=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
-    rlen[0]+=dim[0]*Lx
-    rlen[1]+=dim[1]*Ly
-    rlen[2]+=dim[2]*Lz
-    r2_sum+=rlen.abs()**2
+    rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
+    rtmp[0]+=float(dim[0])*Lx
+    rtmp[1]+=float(dim[1])*Ly
+    rtmp[2]+=float(dim[2])*Lz
+    r2_sum+=rtmp.abs()**2
+    rlen.append(rtmp.abs())
     
   
   r2_msq=r2_sum/num_chains
@@ -644,23 +648,32 @@ if not skipPPA:
   #tbd=[]
   for i in range(num_chains):
     c2=clen[i]**2
-    klen.append(r2_msq/clen[i])
-    elen.append(r2_msq/c2*(monomers_per_chain-1))
+    r2=rlen[i]**2
+    klen.append(r2/clen[i])
+    elen.append(r2/c2*float(monomers_per_chain-1))
     #tbd.append(math.sqrt(elen[i])*clen[i]/(monomers_per_chain-1))
-    znum.append(monomers_per_chain/(monomers_per_chain-1)*(c2/r2_msq-1))
+    znum.append(float(monomers_per_chain)/float(monomers_per_chain-1)*(c2/r2-1))
     
+  print("---------------")
   print("R_SQUARE> ",r2_msq)
   print("R_MEAN> ",math.sqrt(r2_msq))
   print("---------------")
   print("CONTOUR> ",clen[0:nc_print])
- #print("---------------")
+  print("CT_AVG> ",sum(clen)/float(len(clen)))
+  print("---------------")
   print("KUHN> ",klen[0:nc_print])
+  print("APP_AVG> ",sum(klen)/float(len(klen)))
+  print("---------------")
   bpp=[x/(monomers_per_chain-1) for x in clen]
   print("BPP> ",bpp[0:nc_print])
+  print("BPP_AVG> ",sum(bpp)/float(len(bpp)))
   print("---------------")
  #print("TUBED> ",tbd)
  #print("DIAMETER> ",diam)
-  print("---------------")
-  print("NENTANG> ",elen[0:nc_print])
  #print("---------------")
+  print("NENTANG> ",elen[0:nc_print])
+  print("N_AVG> ",sum(elen)/float(len(elen)))
+  print("---------------")
   print("ZENTANG> ",znum[0:nc_print])
+  print("Z_AVG> ",sum(znum)/float(len(znum)))
+  print("---------------")

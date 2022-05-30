@@ -192,6 +192,15 @@ inline void VerletListInteractionTemplate<_Potential>::addForces()
                 p2.force() -= force;
                 LOG4ESPP_TRACE(_Potential::theLogger,
                                "id1=" << p1.id() << " id2=" << p2.id() << " force=" << force);
+if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL && verletList->getSystemRef().shearOffset>0.7){
+int md_step=int(0.5+verletList->getSystemRef().shearOffset/verletList->getSystemRef().bc->getBoxL()[2]/verletList->getSystemRef().shearRate/0.002);
+if (abs(force[0])>5000.0 || p1.id()==atoi(getenv("VAR1")) || p2.id()==atoi(getenv("VAR1"))){
+//if (p1.id()==atoi(getenv("VAR1")) && p2.id()-p1.id()<3){
+std::cout<<"LJ> STEP-"<<md_step<<" | "
+<<p1.id()<<" ("<<p1.position()<<") "
+<<p2.id()<<" ("<<p2.position()<<") - "
+<<force.abs()<<" \n";
+}}
             }
         }
     }
