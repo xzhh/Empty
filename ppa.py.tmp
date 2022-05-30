@@ -399,8 +399,8 @@ for step in range(prod_nloops+1):
       
       #collect end-to-end orientation (normailized)
       if not skipOri:
-		print("Current Ori is wrong(shearOffset)")
-		sys.exit(0)
+        print("Current Ori is wrong(shearOffset)")
+        sys.exit(0)
         mono_idx=(j-1)%monomers_per_chain
         chain_idx=(j-1-mono_idx)/monomers_per_chain
         if chain_idx<nc_print:
