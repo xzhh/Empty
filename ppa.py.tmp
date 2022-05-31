@@ -634,9 +634,10 @@ if not skipPPA:
     #diam.append(maxd*2.0)
     
     rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
-    rtmp[0]+=float(dim[0])*Lx
-    rtmp[1]+=float(dim[1])*Ly
     rtmp[2]+=float(dim[2])*Lz
+    rtmp[0]+=float(dim[2])*system.shearOffset
+    rtmp[1]+=float(dim[1])*Ly
+    rtmp[0]+=float(dim[0])*Lx
     r2_sum+=rtmp.abs()**2
     rlen.append(rtmp.abs())
     
