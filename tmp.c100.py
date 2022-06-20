@@ -103,7 +103,7 @@ system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
 
 system.skin = skin
 comm = MPI.COMM_WORLD
-if comm.size%4 ==0:
+if comm.size > 4 and comm.size%4 == 0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
   nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
@@ -160,7 +160,7 @@ for nc in range(num_chains):
     for j in range(i+1,(nc+1)*monomers_per_chain+1):
       exlist.append((i,j))
 vl.exclude(exlist)
-vl_intra.exclude(vl.getAllPairs())
+vl_intra.exclude(vl.getAllPairs()[0])
 
 potLJ = espressopp.interaction.LennardJones(0.01, 1.0, cutoff = rc, shift = "auto")
 interLJ = espressopp.interaction.VerletListLennardJones(vl)

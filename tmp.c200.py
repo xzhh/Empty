@@ -56,7 +56,7 @@ skipMSID=True
 FLAG_MD=not (skipProf and skipOri)
 shear_rate = 0.02
 timestep = 0.002
-ts_warm = 0.0002
+ts_warm = 0.002
 
 # set parameters for simulations
 seed               = 654321  # seed for random
@@ -150,13 +150,31 @@ for i in range(num_chains):
 system.storage.decompose()
 
 
-# Lennard-Jones with Verlet list
-vl = espressopp.VerletList(system, cutoff = rc + system.skin)
-potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-interLJ = espressopp.interaction.VerletListLennardJones(vl)
+# Lennard-Jones with Verlet list (distinguish by intra- 
+# and inter-molecular interactions)
+vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
+vl_intra = espressopp.FixedPairList(system.storage)
+
+exlist=[]
+for nc in range(num_chains):
+  for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
+    for j in range(i+1,(nc+1)*monomers_per_chain+1):
+      exlist.append((i,j))
+vl_inter.exclude(exlist)
+vl_intra.addBonds(exlist)
+
+# Prepare LJ potentials
+potLJ = espressopp.interaction.LennardJones(0.01, 1.0, cutoff = rc, shift = "auto")
+interLJ = espressopp.interaction.VerletListLennardJones(vl_inter)
 interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
 system.addInteraction(interLJ)
 
+potLJ_intra = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+interLJ_intra = espressopp.interaction.FixedPairListLennardJones(system,vl_intra)
+interLJ_intra.setPotential(type1 = 0, type2 = 0, potential = potLJ_intra)
+system.addInteraction(interLJ_intra)
+
+# Prepare FENE bonds
 if (ifbond):
   print("Num_BondList  = ", bondlist.size())
   #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
@@ -175,11 +193,10 @@ if (ifbond):
 
 # integrator
 integrator = espressopp.integrator.VelocityVerlet(system)
-  
 integrator.dt = ts_warm
 
 if (dpd):
-  langevin=espressopp.integrator.DPDThermostat(system, vl)
+  langevin=espressopp.integrator.DPDThermostat(system, vl_inter)
   langevin.gamma=5.0
   langevin.tgamma=0.0
   langevin.temperature = temperature
@@ -235,11 +252,11 @@ nwarm=int(warmup_nloops*timestep/ts_warm)
 espressopp.tools.analyse.info(system, integrator)
 for step in range(nwarm):
   # incresing strength of force
-  potLJ.epsilon = (step+1.0)/nwarm*1.0
+  potLJ.epsilon = max((step+1.0)/nwarm,0.01)*1.0
   interLJ.setPotential(type1=0, type2=0, potential=potLJ)
-  if (ifbond):
-    potFENE.K= (step+1.0)/nwarm*30.0
-    interFENE.setPotential(potential=potFENE)
+  #if (ifbond):
+  #  potFENE.K= (step+1.0)/nwarm*30.0
+  #  interFENE.setPotential(potential=potFENE)
   
   # perform warmup_isteps integraton steps
   #print "STEP ",step,"> ",potLJ.epsilon,potFENE.K
@@ -254,7 +271,7 @@ print("warmup finished")
 
 #replace the capped potential
 if (ifbond):
-  system.removeInteraction(1) 
+  system.removeInteraction(2) 
   potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
   interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
   system.addInteraction(interFENE)
@@ -487,9 +504,9 @@ if (ifbond):
 
 # print timings and neighbor list information
 timers.show(integrator2.getTimers(), precision=3)
-sys.stdout.write('Total # of neighbors = %d\n' % vl.totalSize())
-sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl.totalSize() / float(num_particles)))
-sys.stdout.write('Neighbor list builds = %d\n' % vl.builds)
+sys.stdout.write('Total # of neighbors = %d\n' % vl_inter.totalSize())
+sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl_inter.totalSize() / float(num_particles)))
+sys.stdout.write('Neighbor list builds = %d\n' % vl_inter.builds)
 sys.stdout.write('Integration steps = %d\n' % integrator2.step)
 sys.stdout.write('CPUs = %i CPU time per CPU = %.1f\n' % (comm.size,end_time - start_time))
 
@@ -505,22 +522,17 @@ if not skipPPA:
   #if os.path.exists("FLAG_V"):
   #  os.remove("FLAG_V")
   
+  system.removeInteraction(2) 
   system.removeInteraction(1) 
-  system.removeInteraction(0) 
+  #system.removeInteraction(0) 
   langevin.disconnect()
   # the equilibration uses a different interaction cutoff therefore the current
   # verlet list is not needed any more and would waste only CPU time
   
-  exlist=[]
-  for nc in range(num_chains):
-    for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
-      for j in range(i+1,(nc+1)*monomers_per_chain+1):
-        exlist.append((i,j))
-  vl.exclude(exlist)
-  potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-  interLJ = espressopp.interaction.VerletListLennardJones(vl)
-  interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
-  system.addInteraction(interLJ)
+  #potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+  #interLJ = espressopp.interaction.VerletListLennardJones(vl_inter)
+  #interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
+  #system.addInteraction(interLJ)
   
   if (ifbond):
     #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
