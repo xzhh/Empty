@@ -39,7 +39,6 @@ from espressopp.tools import decomp, timers, replicate
 import os
 #import gc
 
-
 # simulation parameters (nvt = False is nve)
 ifVisc=False
 if os.path.exists("FLAG_VIS"):
@@ -56,7 +55,6 @@ skipMSID=True
 FLAG_MD=not (skipProf and skipOri)
 shear_rate = 0.02
 timestep = 0.002
-ts_warm = 0.002
 
 # set parameters for simulations
 seed               = 654321  # seed for random
@@ -103,7 +101,7 @@ system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
 
 system.skin = skin
 comm = MPI.COMM_WORLD
-if comm.size%4 ==0:
+if comm.size>4 and comm.size%4 ==0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
   nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
@@ -130,7 +128,7 @@ chain = []
 for i in range(num_chains):
   startpos = system.bc.getRandomPos()
   #positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, return_angles=True, rng=None)#system.rng)
-  positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=None)#system.rng)
+  positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
   for k in range(monomers_per_chain):
     part = [pid + k, chain_type, mass, positions[k], vel_zero]
     chain.append(part)
@@ -155,13 +153,19 @@ system.storage.decompose()
 vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
 vl_intra = espressopp.FixedPairList(system.storage)
 
-exlist=[]
 for nc in range(num_chains):
+  exlist=[]
   for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
     for j in range(i+1,(nc+1)*monomers_per_chain+1):
       exlist.append((i,j))
-vl_inter.exclude(exlist)
-vl_intra.addBonds(exlist)
+  vl_inter.exclude(exlist)
+  del exlist
+
+#vl_inter.exclude(exlist)
+#vl_intra.addBonds(exlist)
+#exlist=[]
+#print("BONDS: ",type(exlist),exlist[0:10])
+#sys.exit(0)
 
 # Prepare LJ potentials
 potLJ = espressopp.interaction.LennardJones(0.01, 1.0, cutoff = rc, shift = "auto")
@@ -170,8 +174,7 @@ interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
 system.addInteraction(interLJ)
 
 potLJ_intra = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-interLJ_intra = espressopp.interaction.FixedPairListLennardJones(system,vl_intra)
-interLJ_intra.setPotential(type1 = 0, type2 = 0, potential = potLJ_intra)
+interLJ_intra = espressopp.interaction.FixedPairListLennardJones(system,vl_intra,potLJ_intra)
 system.addInteraction(interLJ_intra)
 
 # Prepare FENE bonds
@@ -193,10 +196,11 @@ if (ifbond):
 
 # integrator
 integrator = espressopp.integrator.VelocityVerlet(system)
-integrator.dt = ts_warm
+integrator.dt = timestep
 
 if (dpd):
-  langevin=espressopp.integrator.DPDThermostat(system, vl_inter)
+  vl_all = espressopp.VerletList(system, cutoff = rc + system.skin)
+  langevin=espressopp.integrator.DPDThermostat(system, vl_all)
   langevin.gamma=5.0
   langevin.tgamma=0.0
   langevin.temperature = temperature
@@ -248,14 +252,13 @@ for k in range(50):
 
 #Warm-up
 print("starting warm-up ...")
-nwarm=int(warmup_nloops*timestep/ts_warm)
 espressopp.tools.analyse.info(system, integrator)
-for step in range(nwarm):
+for step in range(warmup_nloops):
   # incresing strength of force
-  potLJ.epsilon = max((step+1.0)/nwarm,0.01)*1.0
+  potLJ.epsilon = max((step+1.0)/warmup_nloops,0.01)*1.0
   interLJ.setPotential(type1=0, type2=0, potential=potLJ)
   #if (ifbond):
-  #  potFENE.K= (step+1.0)/nwarm*30.0
+  #  potFENE.K= (step+1.0)/warmup_nloops*30.0
   #  interFENE.setPotential(potential=potFENE)
   
   # perform warmup_isteps integraton steps
@@ -278,18 +281,8 @@ if (ifbond):
 
 #Equilibration
 print("starting equilibration ...")
-nequi=int(equi_nloops*timestep/ts_warm)/2
 espressopp.tools.analyse.info(system, integrator)
-for step in range(nequi):
-  integrator.run(equi_isteps)
-  espressopp.tools.analyse.info(system, integrator)
-  if (math.isnan(interFENE.computeEnergy())):
-    print("FENE becomes NaN after equilibration")
-    sys.exit(0)
-    
-print("restore timestep ...")
-integrator.dt = timestep
-for step in range(equi_nloops/2):
+for step in range(equi_nloops):
   integrator.run(equi_isteps)
   espressopp.tools.analyse.info(system, integrator)
   if (math.isnan(interFENE.computeEnergy())):
@@ -312,7 +305,6 @@ print("NRESORT>", integrator.getNumResorts())
 ########################################################################
 # RUN shear flow MD                                                  #
 ########################################################################
-
 
 # cancelling thermostat
 #langevin.disconnect()
