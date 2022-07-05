@@ -148,7 +148,7 @@ for i in range(num_chains):
 system.storage.decompose()
 
 
-# Lennard-Jones with Verlet list (distinguish by intra- 
+# Lennard-Jones with Verlet list (separated by intra- 
 # and inter-molecular interactions)
 vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
 vl_intra = espressopp.FixedPairList(system.storage)

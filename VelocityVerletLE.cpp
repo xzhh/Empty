@@ -424,10 +424,10 @@ void VelocityVerletLE::integrate2()
         for (CellListIterator cit(realCells); !cit.isDone(); ++cit)
         {
             real dtfm = half_dt / cit->mass();
-            // SLLOD
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
+            // SLLOD correction
+            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
             // Need to add propagation of shear speed if necessary
             // Collect xz-&zx- components from stress Tensor
             mv2 += cit->mass() * cit->velocity()[0] * cit->velocity()[2];
@@ -450,10 +450,10 @@ void VelocityVerletLE::integrate2()
         for (CellListIterator cit(realCells); !cit.isDone(); ++cit)
         {
             real dtfm = half_dt / cit->mass();
-            // SLLOD
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
+            // SLLOD correction
+            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
         }
     }
 
