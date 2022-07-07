@@ -110,7 +110,8 @@ public:
                 Real3D vel = cit->velocity();
                 if (!has_types || valid_type_ids.count(cit->type()))
                 {
-                    v2sum += cit->mass() * (vel * vel);
+                    //v2sum += cit->mass() * (vel * vel);
+                    v2sum += cit->mass() * (vel[1] * vel[1]);
                     count += 1;
                 }
             }
@@ -122,7 +123,7 @@ public:
         mpi::all_reduce(*getSystem()->comm, myN, systemN, std::plus<int>());
 
         eKin_ = 0.5 * sumT;
-        return sumT / (3.0 * systemN);
+        return sumT / (1.0 * systemN);
     }
 
     real getEkin() const { return eKin_; }
