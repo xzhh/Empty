@@ -69,6 +69,14 @@ VelocityVerletLE::VelocityVerletLE(shared_ptr<System> system, real _shearRate)
         System& system = getSystemRef();
         system.shearRate = shearRate;
         system.ifShear = true;
+        
+        CellList realCells = system.storage->getRealCells();
+        real halfL = system.bc->getBoxL()[2] / 2.0;
+        for (CellListIterator cit(realCells); !cit.isDone(); ++cit)
+        {
+            // Initialize velocities for X dim (SLLOD).
+            cit->velocity()[0] += shearRate * (cit->position()[2] - halfL);
+        }
     }
     else
     {
@@ -348,10 +356,8 @@ real VelocityVerletLE::integrate1()
 
         real dtfm = 0.5 * dt / cit->mass();
 
-        // Propagate velocities for X dim (SLLOD).
-        cit->velocity()[0] += dtfm * (cit->force()[0] - cit->velocity()[2] * shearRate);
-        real vshear = shearRate * (cit->position()[2] + 0.5 * cit->velocity()[2] * dt +
-                                   dtfm * cit->force()[2] * dt / 3.0 - halfL);
+        // Propagate velocities for X dim.
+        cit->velocity()[0] += dtfm * (cit->force()[0] + cit->velocity()[2] * shearRate);
         // Propagate velocities for Y-Z dim.: v(t+0.5*dt) = v(t) + 0.5*dt * f(t)
         cit->velocity()[2] += dtfm * cit->force()[2];
         cit->velocity()[1] += dtfm * cit->force()[1];
@@ -361,7 +367,6 @@ real VelocityVerletLE::integrate1()
         deltaP = cit->velocity();
 
         // Add shear speed into X dim.
-        deltaP[0] += vshear;
         deltaP *= dt;
         cit->position() += deltaP;
         sqDist += deltaP * deltaP;
@@ -427,7 +432,7 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
+            cit->velocity()[0] += dtfm * cit->velocity()[2] * shearRate;
             // Need to add propagation of shear speed if necessary
             // Collect xz-&zx- components from stress Tensor
             mv2 += cit->mass() * cit->velocity()[0] * cit->velocity()[2];
@@ -453,7 +458,7 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
+            cit->velocity()[0] += dtfm * cit->velocity()[2] * shearRate;
         }
     }
 
