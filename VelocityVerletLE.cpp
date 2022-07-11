@@ -349,9 +349,10 @@ real VelocityVerletLE::integrate1()
         real dtfm = 0.5 * dt / cit->mass();
 
         // Propagate velocities for X dim (SLLOD).
-        cit->velocity()[0] += dtfm * (cit->force()[0] - cit->velocity()[2] * shearRate);
-        real vshear = shearRate * (cit->position()[2] + 0.5 * cit->velocity()[2] * dt +
-                                   dtfm * cit->force()[2] * dt / 3.0 - halfL);
+        cit->velocity()[0] += dtfm * cit->force()[0] - 0.5 * dt * cit->velocity()[2] * shearRate;
+        real vshear = shearRate * (cit->position()[2] - halfL);
+                                   //+ 0.5 * cit->velocity()[2] * dt 
+                                   //+ dtfm * cit->force()[2] * dt / 3.0);
         // Propagate velocities for Y-Z dim.: v(t+0.5*dt) = v(t) + 0.5*dt * f(t)
         cit->velocity()[2] += dtfm * cit->force()[2];
         cit->velocity()[1] += dtfm * cit->force()[1];
@@ -427,7 +428,7 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
+            cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;
             // Need to add propagation of shear speed if necessary
             // Collect xz-&zx- components from stress Tensor
             mv2 += cit->mass() * cit->velocity()[0] * cit->velocity()[2];
@@ -453,7 +454,7 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= dtfm * cit->velocity()[2] * shearRate;
+            cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;
         }
     }
 
