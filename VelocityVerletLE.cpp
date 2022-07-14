@@ -351,8 +351,8 @@ real VelocityVerletLE::integrate1()
         // Propagate velocities for X dim (SLLOD).
         cit->velocity()[0] += dtfm * cit->force()[0] - 0.5 * dt * cit->velocity()[2] * shearRate;
         real vshear = shearRate * (cit->position()[2] - halfL);
-                                   //+ 0.5 * cit->velocity()[2] * dt 
-                                   //+ dtfm * cit->force()[2] * dt / 3.0);
+                                   // + 0.5 * cit->velocity()[2] * dt // first
+                                   // + dtfm * cit->force()[2] * dt / 3.0); // and second order for coord propagation
         // Propagate velocities for Y-Z dim.: v(t+0.5*dt) = v(t) + 0.5*dt * f(t)
         cit->velocity()[2] += dtfm * cit->force()[2];
         cit->velocity()[1] += dtfm * cit->force()[1];
