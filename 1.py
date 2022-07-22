@@ -76,7 +76,7 @@ timestep = 0.001
 tot_types= 5 # The total num of atomic types, 5 (0~4) in this case
 
 # add shear rate / NSteps
-shear_rate = 0.0001
+shear_rate = 0.000001
 equi_nloops = 200  # total steps = nloops * isteps
 equi_isteps = 50
 # number of prod loops
@@ -219,7 +219,41 @@ vl.exclude(exclusions)
 #vl_eff = espressopp.VerletList(system, cutoff=rc + system.skin,exclusionlist=exclusions)
 ###print vl_eff.getAllPairs()
 
-qq_interactions=gromacs.setCoulombInteractions(system, vl, rc, types, epsilon1=1, epsilon2=80, kappa=0)
+#qq_interactions=gromacs.setCoulombInteractions(system, vl_lj, rc, types, epsilon1=1, epsilon2=80, kappa=0)
+#define coulomb interactions with ewald
+coulomb_prefactor = 138.935485
+#alphaEwald     = 1.112583061 #  alpha - Ewald parameter
+#alphaEwald     = 0.660557
+rspacecutoff   = rc #3.0*pow(1/density,1.0/3.0) #  rspacecutoff - the cutoff in real space
+alphaEwald     = 2.885757 
+kspacecutoff   = 15 #  kspacecutoff - the cutoff in reciprocal space
+
+# Add Compensation terms first
+fpl_excl=espressopp.FixedPairList(system.storage)
+fpl_excl.addBonds(exclusions)
+coulombR_potBonded = espressopp.interaction.CoulombMultiSiteCorrectionEwald(coulomb_prefactor, alphaEwald, rspacecutoff)
+coulombR_intBonded = espressopp.interaction.FixedPairListTypesCoulombMultiSiteCorrectionEwald(system,fpl_excl)
+for i in range(tot_types-1):
+  if i!=3:
+    for j in range(i, tot_types-1):
+      if j!=3:
+        coulombR_intBonded.setPotential(type1=i, type2=j, potential=coulombR_potBonded)
+system.addInteraction(coulombR_intBonded) # cancelling self energies for interatomic interactions
+
+coulombR_potEwald = espressopp.interaction.CoulombRSpace(coulomb_prefactor, alphaEwald, rspacecutoff)
+coulombR_intEwald = espressopp.interaction.VerletListCoulombRSpace(vl)
+for i in range(tot_types):
+  if i!=3:
+    for j in range(i, tot_types):
+      if j!=3:
+        #print "I-J: ",i,j
+        coulombR_intEwald.setPotential(type1=i, type2=j, potential = coulombR_potEwald)
+system.addInteraction(coulombR_intEwald)
+
+coulombK_potEwald = espressopp.interaction.CoulombKSpaceEwald(system, coulomb_prefactor, alphaEwald, kspacecutoff)
+coulombK_intEwald = espressopp.interaction.CellListCoulombKSpaceEwald(system.storage, coulombK_potEwald)
+system.addInteraction(coulombK_intEwald)
+
 
 # bonded 2-body interactions
 bondedinteractions=gromacs.setBondedInteractions(system, bondtypes, bondtypeparams)
@@ -325,7 +359,7 @@ Eb, Ea, Ed=0,0,0
 for bd in bondedinteractions.values():Eb+=bd.computeEnergy()
 for ang in angleinteractions.values(): Ea+=ang.computeEnergy()
 #for dih in dihedralinteractions.values(): Ed+=dih.computeEnergy()
-EQQ=qq_interactions.computeEnergy()
+EQQ= coulombR_intBonded.computeEnergy()+coulombR_intEwald.computeEnergy()+coulombK_intEwald.computeEnergy()
 
 Etotal = Ek + Ep + EQQ + Eb + Ea + Ed
 sys.stdout.write(' step     T          P          Pxy        etotal      ekinetic      epair         ecoul         ebond       eangle       edihedral\n')
@@ -365,7 +399,7 @@ for i in range(prod_nloops):
     Pij = pressureTensor.compute()
     Ek = 0.5 * T * (3 * num_particles)
     Ep = internb.computeEnergy()
-    EQQ=qq_interactions.computeEnergy()        
+    EQQ= coulombR_intBonded.computeEnergy()+coulombR_intEwald.computeEnergy()+coulombK_intEwald.computeEnergy()
     
     Eb, Ea, Ed=0,0,0
     for bd in bondedinteractions.values():Eb+=bd.computeEnergy()
