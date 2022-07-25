@@ -135,7 +135,7 @@ public:
         Lx = Li[0];
         Ly = Li[1];
         Lz = Li[2];
-        shear_flag = system->ifShear;
+        // shear_flag = system->ifShear;
 
         /*if (getenv("CTHETAX10")!=NULL){
           cottheta=(atoi(getenv("CTHETAX10"))+.0)/10.0;
@@ -199,12 +199,12 @@ public:
                 // for (int kz = -kmax; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                    if (shear_flag)
+                    /* if (shear_flag)
                     {
                         rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
                         rkz2 = rkz2 * rkz2;
                     }
-                    else
+                    else */
                         rkz2 = kz2 * rLz2;
                     rk2PIz = kz * rclz;
 
@@ -261,6 +261,116 @@ public:
     }
 
     // here we get the current particle number on the current node
+    void preset_lite()
+    {
+        // TODO it could be parallelized too
+        Real3D Li = system->bc->getBoxL();  // getting the system size
+        Lx = Li[0];
+        Ly = Li[1];
+        Lz = Li[2];
+        // shear_flag = system->ifShear;
+
+        real skmax = kmax / min(Lx, min(Ly, Lz));
+        real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
+
+        rclx = M_2PI / Lx;
+        rcly = M_2PI / Ly;
+        rclz = M_2PI / Lz;
+
+        force_prefac[0] = prefactor * (-2.0) * rclx;
+        force_prefac[1] = prefactor * (-2.0) * rcly;
+        force_prefac[2] = prefactor * (-2.0) * rclz;
+
+        // precalculate factors
+        real invAlpha2 = 1.0 / (alpha * alpha);
+        real B = M_PI2 * invAlpha2;         // PI^2 / alpha^2
+        real inv2alpha2 = 0.5 * invAlpha2;  // 1.0 / (2*alpha^2)
+        real V = M_2PI * Lx * Ly * Lz;
+
+        /* calculate the k-vector array */
+        int ksq, kx2, ky2, kz2;
+        real rksq, rkx2, rky2, rkz2;
+        real rLx2 = 1. / (Lx * Lx);
+        real rLy2 = 1. / (Ly * Ly);
+        real rLz2 = 1. / (Lz * Lz);
+        real rk2PIx, rk2PIy, rk2PIz;
+        kVectorLength = 0;
+        // clear all vectors
+        kvector.clear();
+        kxfield.clear();
+        kyfield.clear();
+        kzfield.clear();
+
+        kx_ind.clear();
+        ky_ind.clear();
+        kz_ind.clear();
+        virialPref.clear();
+        virialDyadicXZ.clear();
+        virialTensorPref.clear();
+
+        int min_ky = 0;
+        int min_kz = 1;
+
+        for (int kx = 0; kx <= kmax; kx++)
+        {
+            kx2 = kx * kx;
+            rkx2 = kx2 * rLx2;
+            rk2PIx = kx * rclx;
+            for (int ky = min_ky; ky <= kmax; ky++)
+            // for (int ky = -kmax; ky <= kmax; ky++)
+            {
+                ky2 = ky * ky;
+                rky2 = ky2 * rLy2;
+                rk2PIy = ky * rcly;
+                for (int kz = min_kz; kz <= kmax; kz++)
+                // for (int kz = -kmax; kz <= kmax; kz++)
+                {
+                    kz2 = kz * kz;
+                     if (shear_flag)
+                    {
+                        rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
+                        rkz2 = rkz2 * rkz2;
+                    }
+                    else
+                        rkz2 = kz2 * rLz2;
+                    rk2PIz = kz * rclz;
+
+                    ksq = kx2 + ky2 + kz2;
+                    rksq = rkx2 + rky2 + rkz2;
+
+                    if ((rksq < skmaxsq) && (ksq != 0))
+                    {
+                        kvector.push_back(exp(-rksq * B) / (rksq * V));
+
+                        kxfield.push_back(kx);
+                        kyfield.push_back(ky);
+                        kzfield.push_back(kz);
+
+                        kx_ind.push_back(kx);
+                        ky_ind.push_back(kmax + ky);
+                        kz_ind.push_back(kmax + kz);
+
+                        // the tensor should be: deltaKronecker(i,j) - 2*hi*hj / h^2 - hi*hj /
+                        // (2*alfa^2)
+                        Real3D h(rk2PIx, rk2PIy, rk2PIz);
+                        real h2 = h * h;
+                        Tensor hh(h, h);  // it is tensor: hi*hj
+
+                        virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
+                        virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
+                        virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
+                                                 (4.0 / h2 + invAlpha2) / Lx / Lz);
+
+                        kVectorLength++;
+                    }
+                }
+                min_kz = -kmax;
+            }
+            min_ky = -kmax;
+        }
+    }
+
+    // here we get the current particle number on the current node
     // and set the auxiliary arrays eikx, eiky, eikz
     void getParticleNumber()
     {
@@ -311,6 +421,12 @@ public:
     {
         if (system->ifShear)
         {
+            // initialize k_mode for the first sheared step
+            if (k_mode < 0)
+            {
+                k_mode = 1;  // preset_lite() every step
+                // k_mode = 2; // read kvectors if recorded
+            }
             shear_flag = system->ifShear;
             real offs = system->shearOffset;
             cottheta = ((offs > Lx / 2.0 ? offs - Lx : offs)) / Lz;
@@ -320,7 +436,8 @@ public:
         int j = 0;  // auxiliary variable, particle counter
         if (shear_flag && cottheta != .0)
         {
-            preset();
+            if (k_mode == 1) preset_lite();
+            // preset();
 
             // calculate ksum for ewald under shear flow
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
