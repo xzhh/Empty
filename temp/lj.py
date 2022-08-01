@@ -111,7 +111,7 @@ sigma              = 1.0
 # interaction cut-off used during the warm-up phase
 warmup_cutoff      = 2.0 #pow(2.0, 1.0/6.0)
 # number of warm-up loops
-warmup_nloops      = 100
+warmup_nloops      = 2000
 # number of integration steps performed in each warm-up loop
 warmup_isteps      = 50
 # total number of integration steps of the warm-up phase
@@ -125,13 +125,13 @@ epsilon_delta      = (epsilon_end - epsilon_start) / warmup_nloops
 # force capping radius
 capradius          = 0.6
 # number of equilibration loops
-equil_nloops       = 100
+equil_nloops       = 1000
 # number of integration steps performed in each equilibration loop
 equil_isteps       = 100
 # number of prod loops
-prod_nloops       = 500
+prod_nloops       = 5000
 # number of integration steps performed in each production loop
-prod_isteps       = 50
+prod_isteps       = 100
 
 # print ESPResSo++ version and compile info
 print espressopp.Version().info()
