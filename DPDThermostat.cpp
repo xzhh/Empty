@@ -124,7 +124,11 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
 
     // Test code to switch DPD modes in shear simulation
     // mode(0): peculiar vel; mode(1): full vel (incl. shear speed);
+<<<<<<< HEAD
     // To activate custom modes, UNCOMMENT all "/* .. */"
+=======
+    // If in use, UNCOMMENT all "/* .. */"
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
     /*int mode = system.lebcMode;*/
 
     if (dist2 < current_cutoff_sqr)
@@ -135,7 +139,11 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real veldiff = .0;
 
         r /= dist;
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         /*if (system.ifShear && mode == 1)
         {
             Real3D vsdiff = {system.shearRate * (p1.position()[2] - p2.position()[2]), .0, .0};
@@ -145,7 +153,11 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         {*/
         veldiff = (p1.velocity() - p2.velocity()) * r;
         /*}*/
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         real friction = pref1 * omega2 * veldiff;
         real r0 = ((*rng)() - 0.5);
         real noise = pref2 * omega * r0;  //(*rng)() - 0.5);
@@ -174,21 +186,36 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
     // mode(0): peculiar vel; mode(1): full vel (incl. shear speed);
     // If in use, UNCOMMENT all "/* .. */"
     /*int mode = system.lebcMode;*/
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
     if (dist2 < current_cutoff_sqr)
     {
         real dist = sqrt(dist2);
         real omega = 1 - dist / current_cutoff;
         real omega2 = omega * omega;
+<<<<<<< HEAD
         Real3D veldiff = .0;
 
         r /= dist;
 
+=======
+        real veldiff = .0;
+
+        r /= dist;
+        
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         Real3D noisevec(0.0);
         noisevec[0] = (*rng)() - 0.5;
         noisevec[1] = (*rng)() - 0.5;
         noisevec[2] = (*rng)() - 0.5;
+<<<<<<< HEAD
 
+=======
+        
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         /*if (system.ifShear && mode == 1)
         {
             Real3D vsdiff = {system.shearRate * (p1.position()[2] - p2.position()[2]), .0, .0};
@@ -203,12 +230,21 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
 
         // Calculate matrix product of projector and veldiff vector:
         // P dv = (I - r r_T) dv
+<<<<<<< HEAD
         f_damp[0] =
             (1.0 - r[0] * r[0]) * veldiff[0] - r[0] * r[1] * veldiff[1] - r[0] * r[2] * veldiff[2];
         f_damp[1] =
             (1.0 - r[1] * r[1]) * veldiff[1] - r[1] * r[0] * veldiff[0] - r[1] * r[2] * veldiff[2];
         f_damp[2] =
             (1.0 - r[2] * r[2]) * veldiff[2] - r[2] * r[0] * veldiff[0] - r[2] * r[1] * veldiff[1];
+=======
+        f_damp[0] = (1.0 - r[0] * r[0]) * veldiff[0] - r[0] * r[1] * veldiff[1] -
+                    r[0] * r[2] * veldiff[2];
+        f_damp[1] = (1.0 - r[1] * r[1]) * veldiff[1] - r[1] * r[0] * veldiff[0] -
+                    r[1] * r[2] * veldiff[2];
+        f_damp[2] = (1.0 - r[2] * r[2]) * veldiff[2] - r[2] * r[0] * veldiff[0] -
+                    r[2] * r[1] * veldiff[1];
+>>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
 
         // Same with random vector
         f_rand[0] = (1.0 - r[0] * r[0]) * noisevec[0] - r[0] * r[1] * noisevec[1] -
