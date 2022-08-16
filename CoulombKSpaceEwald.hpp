@@ -200,13 +200,13 @@ public:
                 // for (int kz = -kmax; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                    /* if (shear_flag)
+                    if (shear_flag)
                     {
                         rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
                         rkz2 = rkz2 * rkz2;
                     }
-                    else */
-                    rkz2 = kz2 * rLz2;
+                    else
+                        rkz2 = kz2 * rLz2;
                     rk2PIz = kz * rclz;
 
                     ksq = kx2 + ky2 + kz2;
@@ -269,7 +269,6 @@ public:
         Lx = Li[0];
         Ly = Li[1];
         Lz = Li[2];
-        // shear_flag = system->ifShear;
 
         real skmax = kmax / min(Lx, min(Ly, Lz));
         real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
@@ -327,7 +326,7 @@ public:
                 // for (int kz = -kmax; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                     if (shear_flag)
+                    if (shear_flag)
                     {
                         rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
                         rkz2 = rkz2 * rkz2;
@@ -369,6 +368,21 @@ public:
             }
             min_ky = -kmax;
         }
+        
+        if (sum != NULL)
+        {
+            delete[] sum;
+            sum = NULL;
+        }
+        if (totsum != NULL)
+        {
+            delete[] totsum;
+            totsum = NULL;
+        }
+        sum = new dcomplex[kVectorLength];
+        totsum = new dcomplex[kVectorLength];
+
+        getParticleNumber();
     }
 
     // here we get the current particle number on the current node
@@ -418,27 +432,43 @@ public:
     int getKMax() const { return kmax; }
 
     // compute force and energy
-    void exponentPrecalculation(CellList realcells)
+    void exponentPrecalculation(CellList realcells, bool ifVirial = false)
     {
-        if (system->ifShear)
+        if (k_mode < 0)
         {
             // initialize k_mode for the first sheared step
-            if (k_mode < 0)
+            if (system->ifShear)
             {
                 k_mode = 1;  // preset_lite() every step
-                // k_mode = 2; // read kvectors if recorded
+                // k_mode = 2; // interpolate kvectors, NOT done yet
+                shear_flag = system->ifShear;
             }
-            shear_flag = system->ifShear;
+        }
+        
+        if (shear_flag){
             real offs = system->shearOffset;
             cottheta = ((offs > Lx / 2.0 ? offs - Lx : offs)) / Lz;
         }
         /* Calculation of k space sums */
         // -1, 0, 1
         int j = 0;  // auxiliary variable, particle counter
+
         if (shear_flag && cottheta != .0)
         {
-            if (k_mode == 1) preset_lite();
-            // preset();
+            if (ifVirial)
+            {
+                preset();
+            }
+            else
+            {
+                if (k_mode == 1)
+                {
+                    //preset_lite();
+                    preset();
+                }
+                else  // interpolate kvectors, NOT done yet
+                    ;
+            }
 
             // calculate ksum for ewald under shear flow
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
@@ -571,6 +601,8 @@ public:
     // @TODO this function could be void,
     bool _computeForce(CellList realcells)
     {
+//if (shear_flag)
+//printf("TEST01-%d\n",system->comm->rank());
         // exponent array
         exponentPrecalculation(realcells);
 
@@ -631,9 +663,10 @@ public:
     // (!note: all particle interaction contains only one potential)
     real _computeVirial(CellList realcells)
     {
+        
         // TODO it's exactly the same part as energy has
         // exponent array
-        exponentPrecalculation(realcells);
+        exponentPrecalculation(realcells, true);
 
         mpi::communicator communic = *system->comm;
 
@@ -665,9 +698,10 @@ public:
     // (!note: all particle interaction contains only one potential)
     Tensor _computeVirialTensor(CellList realcells)
     {
+        
         // TODO it's exactly the same part as energy does
         // exponent array
-        exponentPrecalculation(realcells);
+        exponentPrecalculation(realcells, true);
 
         mpi::communicator communic = *system->comm;
 
