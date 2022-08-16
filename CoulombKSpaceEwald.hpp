@@ -131,7 +131,6 @@ public:
     // at this point we are ready to prepare the kvector[], it can be done just once at the begin
     void preset()
     {
-printf("#PRESET#\n");
         // TODO it could be parallelized too
         Real3D Li = system->bc->getBoxL();  // getting the system size
         Lx = Li[0];
@@ -265,7 +264,6 @@ printf("#PRESET#\n");
     // here we get the current particle number on the current node
     void preset_lite()
     {
-printf("#LITE#\n");
         // TODO it could be parallelized too
         Real3D Li = system->bc->getBoxL();  // getting the system size
         Lx = Li[0];
@@ -275,18 +273,18 @@ printf("#LITE#\n");
         real skmax = kmax / min(Lx, min(Ly, Lz));
         real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
 
-        rclx = M_2PI / Lx;
+        /* rclx = M_2PI / Lx;
         rcly = M_2PI / Ly;
         rclz = M_2PI / Lz;
 
         force_prefac[0] = prefactor * (-2.0) * rclx;
         force_prefac[1] = prefactor * (-2.0) * rcly;
-        force_prefac[2] = prefactor * (-2.0) * rclz;
+        force_prefac[2] = prefactor * (-2.0) * rclz; */
 
         // precalculate factors
         real invAlpha2 = 1.0 / (alpha * alpha);
         real B = M_PI2 * invAlpha2;         // PI^2 / alpha^2
-        real inv2alpha2 = 0.5 * invAlpha2;  // 1.0 / (2*alpha^2)
+        // real inv2alpha2 = 0.5 * invAlpha2;  // 1.0 / (2*alpha^2)
         real V = M_2PI * Lx * Ly * Lz;
 
         /* calculate the k-vector array */
@@ -294,21 +292,21 @@ printf("#LITE#\n");
         real rksq, rkx2, rky2, rkz2;
         real rLx2 = 1. / (Lx * Lx);
         real rLy2 = 1. / (Ly * Ly);
-        real rLz2 = 1. / (Lz * Lz);
+        // real rLz2 = 1. / (Lz * Lz);
         real rk2PIx, rk2PIy, rk2PIz;
         kVectorLength = 0;
         // clear all vectors
         kvector.clear();
-        kxfield.clear();
-        kyfield.clear();
-        kzfield.clear();
+        // kxfield.clear();
+        // kyfield.clear();
+        // kzfield.clear();
 
-        kx_ind.clear();
-        ky_ind.clear();
-        kz_ind.clear();
-        virialPref.clear();
+        // kx_ind.clear();
+        // ky_ind.clear();
+        // kz_ind.clear();
+        // virialPref.clear();
         virialDyadicXZ.clear();
-        virialTensorPref.clear();
+        // virialTensorPref.clear();
 
         int min_ky = 0;
         int min_kz = 1;
@@ -328,13 +326,13 @@ printf("#LITE#\n");
                 // for (int kz = -kmax; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                    if (shear_flag)
-                    {
-                        rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
-                        rkz2 = rkz2 * rkz2;
-                    }
-                    else
-                        rkz2 = kz2 * rLz2;
+                    // if (shear_flag)
+                    // {
+                    rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
+                    rkz2 = rkz2 * rkz2;
+                    // }
+                    // else
+                    //     rkz2 = kz2 * rLz2;
                     rk2PIz = kz * rclz;
 
                     ksq = kx2 + ky2 + kz2;
@@ -344,24 +342,24 @@ printf("#LITE#\n");
                     {
                         kvector.push_back(exp(-rksq * B) / (rksq * V));
 
-                        kxfield.push_back(kx);
-                        kyfield.push_back(ky);
-                        kzfield.push_back(kz);
+                        // kxfield.push_back(kx);
+                        // kyfield.push_back(ky);
+                        // kzfield.push_back(kz);
 
-                        kx_ind.push_back(kx);
-                        ky_ind.push_back(kmax + ky);
-                        kz_ind.push_back(kmax + kz);
+                        // kx_ind.push_back(kx);
+                        // ky_ind.push_back(kmax + ky);
+                        // kz_ind.push_back(kmax + kz);
 
                         // the tensor should be: deltaKronecker(i,j) - 2*hi*hj / h^2 - hi*hj /
                         // (2*alfa^2)
                         Real3D h(rk2PIx, rk2PIy, rk2PIz);
                         real h2 = h * h;
-                        Tensor hh(h, h);  // it is tensor: hi*hj
+                        // Tensor hh(h, h);  // it is tensor: hi*hj
 
-                        //virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
-                        //virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
-                        //virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
-                        //                         (4.0 / h2 + invAlpha2) / Lx / Lz);
+                        // virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
+                        // virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
+                        virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
+                                                 (4.0 / h2 + invAlpha2) / Lx / Lz);
 
                         kVectorLength++;
                     }
@@ -384,7 +382,7 @@ printf("#LITE#\n");
         sum = new dcomplex[kVectorLength];
         totsum = new dcomplex[kVectorLength];
 
-        //getParticleNumber();
+        getParticleNumber();
     }
 
     // here we get the current particle number on the current node
@@ -392,7 +390,7 @@ printf("#LITE#\n");
     void getParticleNumber()
     {
         nParticles = system->storage->getNRealParticles();
-printf("NPART: %d \n",nParticles);
+
         eikx = vector<vector<dcomplex> >(kmax + 1, vector<dcomplex>(nParticles, 0));
         eiky = vector<vector<dcomplex> >(2 * kmax + 1, vector<dcomplex>(nParticles, 0));
         eikz = vector<vector<dcomplex> >(2 * kmax + 1, vector<dcomplex>(nParticles, 0));
@@ -472,7 +470,7 @@ printf("NPART: %d \n",nParticles);
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
             {
                 Particle& p = *it;
-printf("K-J: %d %d\t",kmax,j);
+
                 real intc = Lx / cottheta;
                 real zshift = -p.position()[0] / cottheta;
                 int nshift = static_cast<int>(floor((p.position()[2] + zshift) / intc) + 1.0);
