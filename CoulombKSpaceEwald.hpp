@@ -131,6 +131,7 @@ public:
     // at this point we are ready to prepare the kvector[], it can be done just once at the begin
     void preset()
     {
+printf("#PRESET#\n");
         // TODO it could be parallelized too
         Real3D Li = system->bc->getBoxL();  // getting the system size
         Lx = Li[0];
@@ -264,6 +265,7 @@ public:
     // here we get the current particle number on the current node
     void preset_lite()
     {
+printf("#LITE#\n");
         // TODO it could be parallelized too
         Real3D Li = system->bc->getBoxL();  // getting the system size
         Lx = Li[0];
