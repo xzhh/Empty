@@ -369,20 +369,20 @@ public:
             min_ky = -kmax;
         }
         
-        // if (sum != NULL)
-        // {
-        //     delete[] sum;
-        //     sum = NULL;
-        // }
-        // if (totsum != NULL)
-        // {
-        //     delete[] totsum;
-        //     totsum = NULL;
-        // }
-        // sum = new dcomplex[kVectorLength];
-        // totsum = new dcomplex[kVectorLength];
+        if (sum != NULL)
+        {
+            delete[] sum;
+            sum = NULL;
+        }
+        if (totsum != NULL)
+        {
+            delete[] totsum;
+            totsum = NULL;
+        }
+        sum = new dcomplex[kVectorLength];
+        totsum = new dcomplex[kVectorLength];
 
-        getParticleNumber();
+        //getParticleNumber();
     }
 
     // here we get the current particle number on the current node
