@@ -242,6 +242,8 @@ public:
             }
             min_ky = -kmax;
         }
+if (shear_flag)
+printf("P-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
 
         // cout <<"node:  "<< system->comm->rank() <<  " kVectorLength: "<< kVectorLength<< " kmax:
         // "<< skmax  <<endl;
@@ -368,6 +370,8 @@ public:
             }
             min_ky = -kmax;
         }
+if (shear_flag)
+printf("N-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
         
         if (sum != NULL)
         {
