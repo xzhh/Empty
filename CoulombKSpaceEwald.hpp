@@ -200,13 +200,13 @@ public:
                 // for (int kz = -kmax; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                    if (shear_flag)
+                    /* if (shear_flag)
                     {
                         rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
                         rkz2 = rkz2 * rkz2;
                     }
-                    else 
-                        rkz2 = kz2 * rLz2;
+                    else */
+                    rkz2 = kz2 * rLz2;
                     rk2PIz = kz * rclz;
 
                     ksq = kx2 + ky2 + kz2;
@@ -357,10 +357,10 @@ public:
                         real h2 = h * h;
                         Tensor hh(h, h);  // it is tensor: hi*hj
 
-                        virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
-                        virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
-                        virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
-                                                 (4.0 / h2 + invAlpha2) / Lx / Lz);
+                        //virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
+                        //virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
+                        //virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
+                        //                         (4.0 / h2 + invAlpha2) / Lx / Lz);
 
                         kVectorLength++;
                     }
@@ -437,8 +437,8 @@ public:
         int j = 0;  // auxiliary variable, particle counter
         if (shear_flag && cottheta != .0)
         {
-            // if (k_mode == 1) preset_lite();
-            preset();
+            if (k_mode == 1) preset_lite();
+            // preset();
 
             // calculate ksum for ewald under shear flow
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
