@@ -470,7 +470,7 @@ public:
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
             {
                 Particle& p = *it;
-
+printf("K-J: %d %d",kmax,j);
                 real intc = Lx / cottheta;
                 real zshift = -p.position()[0] / cottheta;
                 int nshift = static_cast<int>(floor((p.position()[2] + zshift) / intc) + 1.0);
