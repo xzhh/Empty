@@ -242,8 +242,6 @@ public:
             }
             min_ky = -kmax;
         }
-if (shear_flag)
-printf("P-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
 
         // cout <<"node:  "<< system->comm->rank() <<  " kVectorLength: "<< kVectorLength<< " kmax:
         // "<< skmax  <<endl;
@@ -370,21 +368,19 @@ printf("P-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
             }
             min_ky = -kmax;
         }
-if (shear_flag)
-printf("N-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
         
-        if (sum != NULL)
-        {
-            delete[] sum;
-            sum = NULL;
-        }
-        if (totsum != NULL)
-        {
-            delete[] totsum;
-            totsum = NULL;
-        }
-        sum = new dcomplex[kVectorLength];
-        totsum = new dcomplex[kVectorLength];
+        // if (sum != NULL)
+        // {
+        //     delete[] sum;
+        //     sum = NULL;
+        // }
+        // if (totsum != NULL)
+        // {
+        //     delete[] totsum;
+        //     totsum = NULL;
+        // }
+        // sum = new dcomplex[kVectorLength];
+        // totsum = new dcomplex[kVectorLength];
 
         getParticleNumber();
     }
@@ -459,16 +455,12 @@ printf("N-kvec-%d - %d\n",system->comm->rank(),kVectorLength);
 
         if (shear_flag && cottheta != .0)
         {
-            if (ifVirial)
-            {
-                preset();
-            }
-            else
+            if (!ifVirial)
             {
                 if (k_mode == 1)
                 {
-                    //preset_lite();
-                    preset();
+                    preset_lite();
+                    //preset();
                 }
                 else  // interpolate kvectors, NOT done yet
                     ;
