@@ -390,7 +390,7 @@ public:
     void getParticleNumber()
     {
         nParticles = system->storage->getNRealParticles();
-
+printf("NPART: %d \n",nParticles);
         eikx = vector<vector<dcomplex> >(kmax + 1, vector<dcomplex>(nParticles, 0));
         eiky = vector<vector<dcomplex> >(2 * kmax + 1, vector<dcomplex>(nParticles, 0));
         eikz = vector<vector<dcomplex> >(2 * kmax + 1, vector<dcomplex>(nParticles, 0));
@@ -470,7 +470,7 @@ public:
             for (iterator::CellListIterator it(realcells); !it.isDone(); ++it)
             {
                 Particle& p = *it;
-printf("K-J: %d %d",kmax,j);
+printf("K-J: %d %d\t",kmax,j);
                 real intc = Lx / cottheta;
                 real zshift = -p.position()[0] / cottheta;
                 int nshift = static_cast<int>(floor((p.position()[2] + zshift) / intc) + 1.0);
