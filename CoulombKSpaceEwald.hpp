@@ -137,7 +137,7 @@ public:
         Ly = Li[1];
         Lz = Li[2];
         // shear_flag = system->ifShear;
-
+printf("####PRESET####\n");
         /*if (getenv("CTHETAX10")!=NULL){
           cottheta=(atoi(getenv("CTHETAX10"))+.0)/10.0;
           shear_flag=true;
@@ -273,14 +273,6 @@ public:
         real skmax = kmax / min(Lx, min(Ly, Lz));
         real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
 
-        /* rclx = M_2PI / Lx;
-        rcly = M_2PI / Ly;
-        rclz = M_2PI / Lz;
-
-        force_prefac[0] = prefactor * (-2.0) * rclx;
-        force_prefac[1] = prefactor * (-2.0) * rcly;
-        force_prefac[2] = prefactor * (-2.0) * rclz; */
-
         // precalculate factors
         real invAlpha2 = 1.0 / (alpha * alpha);
         real B = M_PI2 * invAlpha2;         // PI^2 / alpha^2
@@ -297,16 +289,14 @@ public:
         kVectorLength = 0;
         // clear all vectors
         kvector.clear();
-        // kxfield.clear();
-        // kyfield.clear();
-        // kzfield.clear();
+        kxfield.clear();
+        kyfield.clear();
+        kzfield.clear();
 
-        // kx_ind.clear();
-        // ky_ind.clear();
-        // kz_ind.clear();
-        // virialPref.clear();
+        kx_ind.clear();
+        ky_ind.clear();
+        kz_ind.clear();
         virialDyadicXZ.clear();
-        // virialTensorPref.clear();
 
         int min_ky = 0;
         int min_kz = 1;
@@ -327,12 +317,8 @@ public:
                 {
                     kz2 = kz * kz;
                     // if (shear_flag)
-                    // {
                     rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
                     rkz2 = rkz2 * rkz2;
-                    // }
-                    // else
-                    //     rkz2 = kz2 * rLz2;
                     rk2PIz = kz * rclz;
 
                     ksq = kx2 + ky2 + kz2;
@@ -342,22 +328,19 @@ public:
                     {
                         kvector.push_back(exp(-rksq * B) / (rksq * V));
 
-                        // kxfield.push_back(kx);
-                        // kyfield.push_back(ky);
-                        // kzfield.push_back(kz);
+                        kxfield.push_back(kx);
+                        kyfield.push_back(ky);
+                        kzfield.push_back(kz);
 
-                        // kx_ind.push_back(kx);
-                        // ky_ind.push_back(kmax + ky);
-                        // kz_ind.push_back(kmax + kz);
+                        kx_ind.push_back(kx);
+                        ky_ind.push_back(kmax + ky);
+                        kz_ind.push_back(kmax + kz);
 
                         // the tensor should be: deltaKronecker(i,j) - 2*hi*hj / h^2 - hi*hj /
                         // (2*alfa^2)
                         Real3D h(rk2PIx, rk2PIy, rk2PIz);
                         real h2 = h * h;
-                        // Tensor hh(h, h);  // it is tensor: hi*hj
-
-                        // virialPref.push_back(prefactor * (1 - h2 * inv2alpha2));
-                        // virialTensorPref.push_back(prefactor * (I - 2 * hh / h2 - hh * inv2alpha2));
+                        
                         virialDyadicXZ.push_back(-prefactor * M_2PI * M_2PI *
                                                  (4.0 / h2 + invAlpha2) / Lx / Lz);
 
