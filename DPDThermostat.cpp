@@ -34,18 +34,17 @@
 #include "iterator/CellListIterator.hpp"
 #include "esutil/RNG.hpp"
 #include "bc/BC.hpp"
-//#include <Random123/threefry.h>
-//#include <Random123/uniform.hpp>
 #include <cmath>
 #include <utility>
 
-#define EXAMPLE_SEED1_U64   R123_64BIT(0xdeadbeef12345678)
-#define EXAMPLE_SEED2_U64   R123_64BIT(0xdecafbadbeadfeed)
+// #define EXAMPLE_SEED1_U64   R123_64BIT(0xdeadbeef12345678)
+// #define EXAMPLE_SEED2_U64   R123_64BIT(0xdecafbadbeadfeed)
 
-#ifndef M_PIl
+/*#ifndef M_PIl
 #define M_PIl 3.1415926535897932384626433832795029L
 #endif
 #define M_2PI (2 * M_PIl)
+*/
 
 namespace espressopp
 {
@@ -68,23 +67,26 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     if (ntotal <= 0)
         throw std::runtime_error("DPD needs to read the total number of particles");
     
-    uint64_t seed64 = EXAMPLE_SEED1_U64; // example user-settable seed
+    uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
+    
+    seed64=(*rng)(1)*(*rng)(INT_MAX)*UINT_MAX+(*rng)(INT_MAX);
     
     counter={{0}};
     ukey = {{seed64}};
     key = ukey;
-    
-/*    double x,y;
+crng = threefry2x64(counter, key);
+std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
 
-std::cout<<ntotal<<":"<<counter
-<<"/"<<x<<" "<<y<<std::endl;
-counter.v[0]=ULONG_MAX+1;
+double x,y;
+//std::cout<<ntotal<<":"<<counter
+//<<"/"<<x<<" "<<y<<std::endl;
+//counter.v[0]=ULONG_MAX+1;
     crng = threefry2x64(counter, key);
     x = uneg11<double>(crng.v[0]);
     y = uneg11<double>(crng.v[1]);
-std::cout<<counter
-<<"/"<<x<<" "<<y<<std::endl;
-*/
+std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
+<<","<<key<<") /"<<x<<" "<<y<<std::endl;
+
     current_cutoff = verletList->getVerletCutoff() - system->getSkin();
     current_cutoff_sqr = current_cutoff * current_cutoff;
 
@@ -94,8 +96,8 @@ std::cout<<counter
     }
 
     rng = system->rng;
-printf("RNG_INT: %d %ld\n",system->comm->rank(),(*rng)(9223372036854775807));
-std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
+//printf("RNG_INT: %d %ld\n",system->comm->rank(),(*rng)(2147483647));
+//std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
     LOG4ESPP_INFO(theLogger, "DPD constructed");
 }
 
