@@ -67,13 +67,7 @@ System::System(int fComm)
     dyadicP_xz = .0;
     dyadicP_zx = .0;
     sumP_xz = .0;
-
-    if (rename("FLAG_VIS", "FLAG_VIS") == 0)
-    {
-        ifViscosity = true;
-    }
-    else
-        ifViscosity = false;
+    ifViscosity = false;
 }
 
 void System::setSkin(real _skin)
