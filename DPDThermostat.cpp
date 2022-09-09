@@ -40,11 +40,10 @@
 // #define EXAMPLE_SEED1_U64   R123_64BIT(0xdeadbeef12345678)
 // #define EXAMPLE_SEED2_U64   R123_64BIT(0xdecafbadbeadfeed)
 
-/*#ifndef M_PIl
+#ifndef M_PIl
 #define M_PIl 3.1415926535897932384626433832795029L
 #endif
 #define M_2PI (2 * M_PIl)
-*/
 
 namespace espressopp
 {
@@ -68,8 +67,8 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
         throw std::runtime_error("DPD needs to read the total number of particles");
     
     uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
-    
     seed64=(*rng)(1)*(*rng)(INT_MAX)*UINT_MAX+(*rng)(INT_MAX);
+throw std::runtime_error("QUIT");    
     
     counter={{0}};
     ukey = {{seed64}};
