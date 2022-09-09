@@ -34,6 +34,7 @@
 #include "iterator/CellListIterator.hpp"
 #include "esutil/RNG.hpp"
 #include "bc/BC.hpp"
+#include "mpi.hpp"
 #include <cmath>
 #include <utility>
 
@@ -76,8 +77,17 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
 
     rng = system->rng;
     
-    uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
-    seed64=(*rng)(1)*(*rng)(INT_MAX)*UINT_MAX+(*rng)(INT_MAX);  
+    uint64_t seed64=0,seed_local=0; // = EXAMPLE_SEED1_U64; // example user-settable seed
+    
+    if (system->comm->rank()==0){
+        int rng1,rng2,rng3;
+        rng1=(*rng)(1);
+        rng2=(*rng)(INT_MAX);
+        rng3=(*rng)(INT_MAX);
+        seed_local=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
+    }
+    
+    mpi::all_reduce(system->comm, seed_local, seed64, boost::mpi::maximum<uint64_t>());
     
     counter={{0}};
     ukey = {{seed64}};
