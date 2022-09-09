@@ -34,22 +34,57 @@
 #include "iterator/CellListIterator.hpp"
 #include "esutil/RNG.hpp"
 #include "bc/BC.hpp"
+//#include <Random123/threefry.h>
+//#include <Random123/uniform.hpp>
+#include <cmath>
+#include <utility>
+
+#define EXAMPLE_SEED1_U64   R123_64BIT(0xdeadbeef12345678)
+#define EXAMPLE_SEED2_U64   R123_64BIT(0xdecafbadbeadfeed)
+
+#ifndef M_PIl
+#define M_PIl 3.1415926535897932384626433832795029L
+#endif
+#define M_2PI (2 * M_PIl)
 
 namespace espressopp
 {
 namespace integrator
 {
 using namespace espressopp::iterator;
+//using namespace r123;
 
 DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
-                             std::shared_ptr<VerletList> _verletList)
-    : Extension(system), verletList(_verletList)
+                             std::shared_ptr<VerletList> _verletList, int _ntotal)
+    : Extension(system), verletList(_verletList), ntotal(_ntotal)
 {
     type = Extension::Thermostat;
 
     gamma = 0.0;
     temperature = 0.0;
+    
+    mdStep = 0;
+    ctr_start = 0;
+    if (ntotal <= 0)
+        throw std::runtime_error("DPD needs to read the total number of particles");
+    
+    uint64_t seed64 = EXAMPLE_SEED1_U64; // example user-settable seed
+    
+    counter={{0}};
+    ukey = {{seed64}};
+    key = ukey;
+    
+/*    double x,y;
 
+std::cout<<ntotal<<":"<<counter
+<<"/"<<x<<" "<<y<<std::endl;
+counter.v[0]=ULONG_MAX+1;
+    crng = threefry2x64(counter, key);
+    x = uneg11<double>(crng.v[0]);
+    y = uneg11<double>(crng.v[1]);
+std::cout<<counter
+<<"/"<<x<<" "<<y<<std::endl;
+*/
     current_cutoff = verletList->getVerletCutoff() - system->getSkin();
     current_cutoff_sqr = current_cutoff * current_cutoff;
 
@@ -59,7 +94,8 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     }
 
     rng = system->rng;
-
+printf("RNG_INT: %d %ld\n",system->comm->rank(),(*rng)(9223372036854775807));
+std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
     LOG4ESPP_INFO(theLogger, "DPD constructed");
 }
 
@@ -113,6 +149,8 @@ void DPDThermostat::thermalize()
         if (gamma > 0.0) frictionThermoDPD(p1, p2);
         if (tgamma > 0.0) frictionThermoTDPD(p1, p2);
     }
+    
+    mdStep++;
 }
 
 void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
@@ -124,11 +162,7 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
 
     // Test code to switch DPD modes in shear simulation
     // mode(0): peculiar vel; mode(1): full vel (incl. shear speed);
-<<<<<<< HEAD
     // To activate custom modes, UNCOMMENT all "/* .. */"
-=======
-    // If in use, UNCOMMENT all "/* .. */"
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
     /*int mode = system.lebcMode;*/
 
     if (dist2 < current_cutoff_sqr)
@@ -137,13 +171,24 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real omega = 1 - dist / current_cutoff;
         real omega2 = omega * omega;
         real veldiff = .0;
+        
+        
+        real u1,u2; // define two rng.v with uniform distribution
+        int i=p1.id();
+        int j=p2.id();
+        if (i>j) std::swap(i,j);
+        counter.v[0]=ctr_start+mdStep*(ntotal*(i-1)*2-i*(i+1)+j*2);
+        //counter.v[1]=counter.v[0]+1;
+        crng = threefry2x64(counter, key); // call rng generator
+        u1 = u01<double>(crng.v[0]);
+        u2 = u01<double>(crng.v[1]);
+
+        real zrng=sqrt(-2.0*log(u1))*cos(M_2PI*u2); // get a rng with normal distribution
+//std::cout<<i<<" "<<j<<"/"<<counter
+//<<"/"<<u1<<" "<<u2<<" "<<zrng<<std::endl;
 
         r /= dist;
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         /*if (system.ifShear && mode == 1)
         {
             Real3D vsdiff = {system.shearRate * (p1.position()[2] - p2.position()[2]), .0, .0};
@@ -153,13 +198,10 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         {*/
         veldiff = (p1.velocity() - p2.velocity()) * r;
         /*}*/
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         real friction = pref1 * omega2 * veldiff;
-        real r0 = ((*rng)() - 0.5);
+        real r0 = zrng;
+        // real r0 = ((*rng)() - 0.5);
         real noise = pref2 * omega * r0;  //(*rng)() - 0.5);
 
         Real3D f = (noise - friction) * r;
@@ -186,36 +228,21 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
     // mode(0): peculiar vel; mode(1): full vel (incl. shear speed);
     // If in use, UNCOMMENT all "/* .. */"
     /*int mode = system.lebcMode;*/
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
     if (dist2 < current_cutoff_sqr)
     {
         real dist = sqrt(dist2);
         real omega = 1 - dist / current_cutoff;
         real omega2 = omega * omega;
-<<<<<<< HEAD
         Real3D veldiff = .0;
 
         r /= dist;
 
-=======
-        real veldiff = .0;
-
-        r /= dist;
-        
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         Real3D noisevec(0.0);
         noisevec[0] = (*rng)() - 0.5;
         noisevec[1] = (*rng)() - 0.5;
         noisevec[2] = (*rng)() - 0.5;
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
         /*if (system.ifShear && mode == 1)
         {
             Real3D vsdiff = {system.shearRate * (p1.position()[2] - p2.position()[2]), .0, .0};
@@ -230,21 +257,12 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
 
         // Calculate matrix product of projector and veldiff vector:
         // P dv = (I - r r_T) dv
-<<<<<<< HEAD
         f_damp[0] =
             (1.0 - r[0] * r[0]) * veldiff[0] - r[0] * r[1] * veldiff[1] - r[0] * r[2] * veldiff[2];
         f_damp[1] =
             (1.0 - r[1] * r[1]) * veldiff[1] - r[1] * r[0] * veldiff[0] - r[1] * r[2] * veldiff[2];
         f_damp[2] =
             (1.0 - r[2] * r[2]) * veldiff[2] - r[2] * r[0] * veldiff[0] - r[2] * r[1] * veldiff[1];
-=======
-        f_damp[0] = (1.0 - r[0] * r[0]) * veldiff[0] - r[0] * r[1] * veldiff[1] -
-                    r[0] * r[2] * veldiff[2];
-        f_damp[1] = (1.0 - r[1] * r[1]) * veldiff[1] - r[1] * r[0] * veldiff[0] -
-                    r[1] * r[2] * veldiff[2];
-        f_damp[2] = (1.0 - r[2] * r[2]) * veldiff[2] - r[2] * r[0] * veldiff[0] -
-                    r[2] * r[1] * veldiff[1];
->>>>>>> 4db51c7c34983e08313fe345514316bc5cd54d5d
 
         // Same with random vector
         f_rand[0] = (1.0 - r[0] * r[0]) * noisevec[0] - r[0] * r[1] * noisevec[1] -
@@ -324,7 +342,7 @@ void DPDThermostat::registerPython()
 {
     using namespace espressopp::python;
     class_<DPDThermostat, std::shared_ptr<DPDThermostat>, bases<Extension> >(
-        "integrator_DPDThermostat", init<std::shared_ptr<System>, std::shared_ptr<VerletList> >())
+        "integrator_DPDThermostat", init<std::shared_ptr<System>, std::shared_ptr<VerletList>, int >())
         .def("connect", &DPDThermostat::connect)
         .def("disconnect", &DPDThermostat::disconnect)
         .add_property("gamma", &DPDThermostat::getGamma, &DPDThermostat::setGamma)
