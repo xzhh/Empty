@@ -65,26 +65,6 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     ctr_start = 0;
     if (ntotal <= 0)
         throw std::runtime_error("DPD needs to read the total number of particles");
-    
-    uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
-    seed64=(*rng)(1)*(*rng)(INT_MAX)*UINT_MAX+(*rng)(INT_MAX);
-throw std::runtime_error("QUIT");    
-    
-    counter={{0}};
-    ukey = {{seed64}};
-    key = ukey;
-crng = threefry2x64(counter, key);
-std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
-
-double x,y;
-//std::cout<<ntotal<<":"<<counter
-//<<"/"<<x<<" "<<y<<std::endl;
-//counter.v[0]=ULONG_MAX+1;
-    crng = threefry2x64(counter, key);
-    x = uneg11<double>(crng.v[0]);
-    y = uneg11<double>(crng.v[1]);
-std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
-<<","<<key<<") /"<<x<<" "<<y<<std::endl;
 
     current_cutoff = verletList->getVerletCutoff() - system->getSkin();
     current_cutoff_sqr = current_cutoff * current_cutoff;
@@ -95,8 +75,20 @@ std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
     }
 
     rng = system->rng;
-//printf("RNG_INT: %d %ld\n",system->comm->rank(),(*rng)(2147483647));
-//std::cout<<"I64-"<<system->comm->rank()<<" "<<seed64<<" "<<(uint64_t)3003<<"\n";
+    
+    uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
+    seed64=(*rng)(1)*(*rng)(INT_MAX)*UINT_MAX+(*rng)(INT_MAX);  
+    
+    counter={{0}};
+    ukey = {{seed64}};
+    key = ukey;
+    
+crng = threefry2x64(counter, key);
+double x,y;
+    x = uneg11<double>(crng.v[0]);
+    y = uneg11<double>(crng.v[1]);
+std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
+<<","<<key<<") /"<<x<<" "<<y<<std::endl;
     LOG4ESPP_INFO(theLogger, "DPD constructed");
 }
 
