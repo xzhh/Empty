@@ -140,12 +140,12 @@ void DPDThermostat::thermalize()
         counter={{0}};
         ukey = {{seed64}};
         key = ukey;
-//crng = threefry2x64(counter, key);
-//double x,y;
-//x = uneg11<double>(crng.v[0]);
-//y = uneg11<double>(crng.v[1]);
+crng = threefry2x64(counter, key);
+counter.v[0]=INT_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
+counter.v[0]=UINT_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
+counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
 //std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
-//<<","<<key<<") /"<<x<<" "<<y<<std::endl;
+//<<","<<key<<") /"<<uneg11<double>(crng.v[0])<<std::endl;
     }
 #endif
     // loop over VL pairs
