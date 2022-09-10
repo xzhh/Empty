@@ -34,16 +34,19 @@
 #include "iterator/CellListIterator.hpp"
 #include "esutil/RNG.hpp"
 #include "bc/BC.hpp"
-#include "mpi.hpp"
 #include <cmath>
 #include <utility>
 
+#ifdef RANDOM123_EXIST
+#include "mpi.hpp"
 #include <boost/signals2.hpp>
-
+/*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
 #ifndef M_PIl
 #define M_PIl 3.1415926535897932384626433832795029L
 #endif
 #define M_2PI (2 * M_PIl)
+*/
+#endif
 
 namespace espressopp
 {
@@ -62,10 +65,12 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     temperature = 0.0;
     
     mdStep = 0;
-    ctr_start = 0;
+#ifdef RANDOM123_EXIST
+    ngenerator_per_pair=1
+    if (tgamma > 0.0) ngenerator_per_pair++;
     if (ntotal <= 0)
-        throw std::runtime_error("DPD needs to read the total number of particles");
-
+        throw std::runtime_error("DPD/random123 needs a read to the total number of particles");
+#endif
     current_cutoff = verletList->getVerletCutoff() - system->getSkin();
     current_cutoff_sqr = current_cutoff * current_cutoff;
 
@@ -76,29 +81,6 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
 
     rng = system->rng;
     
-    uint64_t seed64=0; // = EXAMPLE_SEED1_U64; // example user-settable seed
-    
-    if (system->comm->rank()==0){
-        int rng1,rng2,rng3;
-        rng1=(*rng)(2);
-        rng2=(*rng)(INT_MAX);
-        rng3=(*rng)(INT_MAX);
-        seed64=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
-    }
-    
-    mpi::broadcast(*system->comm, seed64, 0);
-    //mpi::all_reduce(system->comm, seed_local, seed64, boost::mpi::maximum<uint64_t>());
-    
-    counter={{0}};
-    ukey = {{seed64}};
-    key = ukey;
-    
-crng = threefry2x64(counter, key);
-double x,y;
-    x = uneg11<double>(crng.v[0]);
-    y = uneg11<double>(crng.v[1]);
-std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
-<<","<<key<<") /"<<x<<" "<<y<<std::endl;
     LOG4ESPP_INFO(theLogger, "DPD constructed");
 }
 
@@ -142,7 +124,30 @@ void DPDThermostat::thermalize()
 
     System& system = getSystemRef();
     system.storage->updateGhostsV();
-
+    
+#ifdef RANDOM123_EXIST
+    if (mdStep == 0){
+        if (system->comm->rank()==0){
+            int rng1,rng2,rng3;
+            rng1=(*rng)(2);
+            rng2=(*rng)(INT_MAX);
+            rng3=(*rng)(INT_MAX);
+            seed64=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
+        }
+        
+        mpi::broadcast(*system->comm, seed64, 0);
+        
+        counter={{0}};
+        ukey = {{seed64}};
+        key = ukey;
+//crng = threefry2x64(counter, key);
+//double x,y;
+//x = uneg11<double>(crng.v[0]);
+//y = uneg11<double>(crng.v[1]);
+//std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
+//<<","<<key<<") /"<<x<<" "<<y<<std::endl;
+    }
+#endif
     // loop over VL pairs
     for (PairList::Iterator it(verletList->getPairs()); it.isValid(); ++it)
     {
@@ -153,7 +158,13 @@ void DPDThermostat::thermalize()
         if (tgamma > 0.0) frictionThermoTDPD(p1, p2);
     }
     
-    mdStep++;
+#ifdef RANDOM123_EXIST
+    uint64_t ncounter_per_step = (uint64_t)ntotal*(uint64_t)(ntotal-1)/(uint64_t)2*(uint64_t)ncounter_per_pair;
+    if (ULONG_MAX - mdStep * ncounter_per_step < ncounter_per_step)
+        mdStep=0;
+    else
+        mdStep++;
+#endif
 }
 
 void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
@@ -175,21 +186,21 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real omega2 = omega * omega;
         real veldiff = .0;
         
-        
-        real u1,u2; // define two rng.v with uniform distribution
         int i=p1.id();
         int j=p2.id();
         if (i>j) std::swap(i,j);
-        counter.v[0]=ctr_start+mdStep*(ntotal*(i-1)*2-i*(i+1)+j*2);
-        //counter.v[1]=counter.v[0]+1;
+        
+#ifdef RANDOM123_EXIST
+        counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
         crng = threefry2x64(counter, key); // call rng generator
-        u1 = u01<double>(crng.v[0]);
-        u2 = u01<double>(crng.v[1]);
-
-        real zrng=sqrt(-2.0*log(u1))*cos(M_2PI*u2); // get a rng with normal distribution
-//std::cout<<i<<" "<<j<<"/"<<counter
-//<<"/"<<u1<<" "<<u2<<" "<<zrng<<std::endl;
-
+        
+        real zrng = u01<double>(crng.v[0]);
+        
+        /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
+        real u2 = u01<double>(crng.v[1]);
+        zrng=sqrt(-2.0*log(zrng))*cos(M_2PI*u2); // get a rng with normal distribution
+        */
+#endif
         r /= dist;
 
         /*if (system.ifShear && mode == 1)
@@ -203,8 +214,14 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         /*}*/
 
         real friction = pref1 * omega2 * veldiff;
+#ifdef RANDOM123_EXIST
+        real r0 = zrng - 0.5;
+        /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
         real r0 = zrng;
-        // real r0 = ((*rng)() - 0.5);
+        */
+#else
+        real r0 = ((*rng)() - 0.5);
+#endif
         real noise = pref2 * omega * r0;  //(*rng)() - 0.5);
 
         Real3D f = (noise - friction) * r;
@@ -242,10 +259,21 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
         r /= dist;
 
         Real3D noisevec(0.0);
+#ifdef RANDOM123_EXIST
+        counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
+        crng = threefry2x64(counter, key); // call rng generator
+        real zrng = u01<double>(crng.v[1]);
+        noisevec[0] = zrng - 0.5;
+        counter.v[0]++;
+        zrng = u01<double>(crng.v[0]);
+        noisevec[1] = zrng - 0.5;
+        zrng = u01<double>(crng.v[1]);
+        noisevec[2] = zrng - 0.5;
+#else
         noisevec[0] = (*rng)() - 0.5;
         noisevec[1] = (*rng)() - 0.5;
         noisevec[2] = (*rng)() - 0.5;
-
+#endif
         /*if (system.ifShear && mode == 1)
         {
             Real3D vsdiff = {system.shearRate * (p1.position()[2] - p2.position()[2]), .0, .0};

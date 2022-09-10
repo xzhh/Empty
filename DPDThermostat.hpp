@@ -34,6 +34,7 @@
 #include "VelocityVerlet.hpp"
 
 #include "boost/signals2.hpp"
+
 #ifdef RANDOM123_EXIST
 #include <Random123/threefry.h>
 #include <Random123/uniform.hpp>
@@ -101,10 +102,11 @@ private:
     std::shared_ptr<VerletList> verletList;
     std::shared_ptr<esutil::RNG> rng;  //!< random number generator used for friction term
     
-    int mdStep;
+    uint64_t mdStep;
     int ntotal;
-    int ctr_start;
+    int ncounter_per_pair;
     
+    uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
     Threefry2x64::ctr_type counter, crng;
     Threefry2x64::ukey_type ukey;
     Threefry2x64::key_type key;
