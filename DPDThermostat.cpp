@@ -39,8 +39,6 @@
 #include <utility>
 
 #include <boost/signals2.hpp>
-// #include "boost/serialization/vector.hpp"
-// #include "boost/serialization/complex.hpp"
 
 #ifndef M_PIl
 #define M_PIl 3.1415926535897932384626433832795029L
@@ -82,13 +80,13 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     
     if (system->comm->rank()==0){
         int rng1,rng2,rng3;
-        rng1=(*rng)(1);
+        rng1=(*rng)(2);
         rng2=(*rng)(INT_MAX);
         rng3=(*rng)(INT_MAX);
         seed64=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
     }
     
-    mpi::broadcast(*system->comm, seed64, 0)
+    mpi::broadcast(*system->comm, seed64, 0);
     //mpi::all_reduce(system->comm, seed_local, seed64, boost::mpi::maximum<uint64_t>());
     
     counter={{0}};
