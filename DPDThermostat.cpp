@@ -66,8 +66,8 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     
     mdStep = 0;
 #ifdef RANDOM123_EXIST
-    ngenerator_per_pair=1
-    if (tgamma > 0.0) ngenerator_per_pair++;
+    ncounter_per_pair=1;
+    if (tgamma > 0.0) ncounter_per_pair++;
     if (ntotal <= 0)
         throw std::runtime_error("DPD/random123 needs a read to the total number of particles");
 #endif
@@ -127,7 +127,7 @@ void DPDThermostat::thermalize()
     
 #ifdef RANDOM123_EXIST
     if (mdStep == 0){
-        if (system->comm->rank()==0){
+        if (system.comm->rank()==0){
             int rng1,rng2,rng3;
             rng1=(*rng)(2);
             rng2=(*rng)(INT_MAX);
@@ -135,7 +135,7 @@ void DPDThermostat::thermalize()
             seed64=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
         }
         
-        mpi::broadcast(*system->comm, seed64, 0);
+        mpi::broadcast(*system.comm, seed64, 0);
         
         counter={{0}};
         ukey = {{seed64}};
@@ -185,12 +185,12 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real omega = 1 - dist / current_cutoff;
         real omega2 = omega * omega;
         real veldiff = .0;
-        
+         
+#ifdef RANDOM123_EXIST
         int i=p1.id();
         int j=p2.id();
         if (i>j) std::swap(i,j);
         
-#ifdef RANDOM123_EXIST
         counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
         crng = threefry2x64(counter, key); // call rng generator
         
@@ -260,6 +260,10 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
 
         Real3D noisevec(0.0);
 #ifdef RANDOM123_EXIST
+        int i=p1.id();
+        int j=p2.id();
+        if (i>j) std::swap(i,j);
+
         counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
         crng = threefry2x64(counter, key); // call rng generator
         real zrng = u01<double>(crng.v[1]);
