@@ -140,10 +140,8 @@ void DPDThermostat::thermalize()
         counter={{0}};
         ukey = {{seed64}};
         key = ukey;
-crng = threefry2x64(counter, key);
-counter.v[0]=INT_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
-counter.v[0]=UINT_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
-counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
+//crng = threefry2x64(counter, key);
+//counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
 //std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
 //<<","<<key<<") /"<<uneg11<double>(crng.v[0])<<std::endl;
     }
@@ -160,6 +158,9 @@ counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
     
 #ifdef RANDOM123_EXIST
     uint64_t ncounter_per_step = (uint64_t)ntotal*(uint64_t)(ntotal-1)/(uint64_t)2*(uint64_t)ncounter_per_pair;
+mdStep=18;
+ncounter_per_step=1000000000000000000;
+std::cout<<"CHECK> "<<ULONG_MAX - mdStep * ncounter_per_step < ncounter_per_step ? 1:0<<std::endl;
     if (ULONG_MAX - mdStep * ncounter_per_step < ncounter_per_step)
         mdStep=0;
     else
@@ -187,8 +188,8 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real veldiff = .0;
          
 #ifdef RANDOM123_EXIST
-        int i=p1.id();
-        int j=p2.id();
+        uint64_t i=p1.id();
+        uint64_t j=p2.id();
         if (i>j) std::swap(i,j);
         
         counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;

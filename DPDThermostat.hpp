@@ -104,7 +104,7 @@ private:
     
     uint64_t mdStep;
     int ntotal;
-    int ncounter_per_pair;
+    uint64_t ncounter_per_pair;
     
     uint64_t seed64; // = EXAMPLE_SEED1_U64; // example user-settable seed
     Threefry2x64::ctr_type counter, crng;
