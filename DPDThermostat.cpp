@@ -53,20 +53,21 @@ namespace espressopp
 namespace integrator
 {
 using namespace espressopp::iterator;
-//using namespace r123;
+// using namespace r123;
 
 DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
-                             std::shared_ptr<VerletList> _verletList, int _ntotal)
+                             std::shared_ptr<VerletList> _verletList,
+                             int _ntotal)
     : Extension(system), verletList(_verletList), ntotal(_ntotal)
 {
     type = Extension::Thermostat;
 
     gamma = 0.0;
     temperature = 0.0;
-    
+
     mdStep = 0;
 #ifdef RANDOM123_EXIST
-    ncounter_per_pair=1;
+    ncounter_per_pair = 1;
     if (tgamma > 0.0) ncounter_per_pair++;
     if (ntotal <= 0)
         throw std::runtime_error("DPD/random123 needs a read to the total number of particles");
@@ -80,7 +81,7 @@ DPDThermostat::DPDThermostat(std::shared_ptr<System> system,
     }
 
     rng = system->rng;
-    
+
     LOG4ESPP_INFO(theLogger, "DPD constructed");
 }
 
@@ -124,26 +125,28 @@ void DPDThermostat::thermalize()
 
     System& system = getSystemRef();
     system.storage->updateGhostsV();
-    
+
 #ifdef RANDOM123_EXIST
-    if (mdStep == 0){
-        if (system.comm->rank()==0){
-            int rng1,rng2,rng3;
-            rng1=(*rng)(2);
-            rng2=(*rng)(INT_MAX);
-            rng3=(*rng)(INT_MAX);
-            seed64=(uint64_t)rng1*(uint64_t)rng2*(uint64_t)UINT_MAX+(uint64_t)rng3;
+    if (mdStep == 0)
+    {
+        if (system.comm->rank() == 0)
+        {
+            int rng1, rng2, rng3;
+            rng1 = (*rng)(2);
+            rng2 = (*rng)(INT_MAX);
+            rng3 = (*rng)(INT_MAX);
+            seed64 = (uint64_t)rng1 * (uint64_t)rng2 * (uint64_t)UINT_MAX + (uint64_t)rng3;
         }
-        
+
         mpi::broadcast(*system.comm, seed64, 0);
-        
-        counter={{0}};
+
+        counter = {{0}};
         ukey = {{seed64}};
         key = ukey;
-//crng = threefry2x64(counter, key);
-//counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
-//std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
-//<<","<<key<<") /"<<uneg11<double>(crng.v[0])<<std::endl;
+        // crng = threefry2x64(counter, key);
+        // counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
+        // std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
+        //<<","<<key<<") /"<<uneg11<double>(crng.v[0])<<std::endl;
     }
 #endif
     // loop over VL pairs
@@ -155,14 +158,13 @@ void DPDThermostat::thermalize()
         if (gamma > 0.0) frictionThermoDPD(p1, p2);
         if (tgamma > 0.0) frictionThermoTDPD(p1, p2);
     }
-    
+
 #ifdef RANDOM123_EXIST
-    uint64_t ncounter_per_step = (uint64_t)ntotal*(uint64_t)(ntotal-1)/(uint64_t)2*(uint64_t)ncounter_per_pair;
-mdStep=18;
-ncounter_per_step=1000000000000000000;
-std::cout<<"CHECK> "<<ULONG_MAX - mdStep * ncounter_per_step < ncounter_per_step ? 1:0<<std::endl;
+    uint64_t ncounter_per_step =
+        (uint64_t)ntotal * (uint64_t)(ntotal - 1) / (uint64_t)2 * (uint64_t)ncounter_per_pair;
+
     if (ULONG_MAX - mdStep * ncounter_per_step < ncounter_per_step)
-        mdStep=0;
+        mdStep = 0;
     else
         mdStep++;
 #endif
@@ -186,17 +188,17 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         real omega = 1 - dist / current_cutoff;
         real omega2 = omega * omega;
         real veldiff = .0;
-         
+
 #ifdef RANDOM123_EXIST
-        uint64_t i=p1.id();
-        uint64_t j=p2.id();
-        if (i>j) std::swap(i,j);
-        
-        counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
-        crng = threefry2x64(counter, key); // call rng generator
-        
+        uint64_t i = p1.id();
+        uint64_t j = p2.id();
+        if (i > j) std::swap(i, j);
+
+        counter.v[0] = mdStep * (ntotal * (i - 1) - i * (i + 1) / 2 + j) * ncounter_per_pair;
+        crng = threefry2x64(counter, key);  // call rng generator
+
         real zrng = u01<double>(crng.v[0]);
-        
+
         /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
         real u2 = u01<double>(crng.v[1]);
         zrng=sqrt(-2.0*log(zrng))*cos(M_2PI*u2); // get a rng with normal distribution
@@ -261,12 +263,12 @@ void DPDThermostat::frictionThermoTDPD(Particle& p1, Particle& p2)
 
         Real3D noisevec(0.0);
 #ifdef RANDOM123_EXIST
-        int i=p1.id();
-        int j=p2.id();
-        if (i>j) std::swap(i,j);
+        int i = p1.id();
+        int j = p2.id();
+        if (i > j) std::swap(i, j);
 
-        counter.v[0]=mdStep*(ntotal*(i-1)-i*(i+1)/2+j)*ncounter_per_pair;
-        crng = threefry2x64(counter, key); // call rng generator
+        counter.v[0] = mdStep * (ntotal * (i - 1) - i * (i + 1) / 2 + j) * ncounter_per_pair;
+        crng = threefry2x64(counter, key);  // call rng generator
         real zrng = u01<double>(crng.v[1]);
         noisevec[0] = zrng - 0.5;
         counter.v[0]++;
@@ -378,7 +380,8 @@ void DPDThermostat::registerPython()
 {
     using namespace espressopp::python;
     class_<DPDThermostat, std::shared_ptr<DPDThermostat>, bases<Extension> >(
-        "integrator_DPDThermostat", init<std::shared_ptr<System>, std::shared_ptr<VerletList>, int >())
+        "integrator_DPDThermostat",
+        init<std::shared_ptr<System>, std::shared_ptr<VerletList>, int>())
         .def("connect", &DPDThermostat::connect)
         .def("disconnect", &DPDThermostat::disconnect)
         .add_property("gamma", &DPDThermostat::getGamma, &DPDThermostat::setGamma)
