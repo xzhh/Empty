@@ -9,8 +9,6 @@ from math import sqrt
 start_time = time.time()
 
 k_theta       = 1.5
-N_chains      = 750
-N_chainlength = 50
 
 try:
 
@@ -44,9 +42,9 @@ if not restart_type in restart_types:
 
 density            = 0.849
 bondlength         = 0.97
-N_particles        = N_chains * N_chainlength
-L                  = ( (N_chains*N_chainlength) / density ) ** (1.0 / 3.0)
-box                = (L, L, L)
+monomers_per_chain = 50
+num_chains         = 15*monomers_per_chain
+nc_print = max(100,3*monomers_per_chain) #num_chains
 
 sigma              = 1.0
 epsilon            = 1.0
@@ -97,18 +95,37 @@ relax_end_time     = 0
 equil_start_time   = 0
 equil_end_time     = 0
 
-xs                 = time.time()
-seed               = int((xs % int(xs)) * 1000000)
-rng                = espressopp.esutil.RNG()
-rng.seed(seed)
+# ==================================================================================================
+# Setting up the simulation box
+# ==================================================================================================
+sys.stdout.write('Setting up simulation ...\n')
 
-nodeGrid           = espressopp.tools.decomp.nodeGrid(espressopp.MPI.COMM_WORLD.size)
-cellGrid           = espressopp.tools.decomp.cellGrid(box, nodeGrid, rc, skin)
-system             = espressopp.System()
-system.rng         = rng
-system.bc          = espressopp.bc.OrthorhombicBC(system.rng, box)
+num_particles        = num_chains * monomers_per_chain
+Lz=Ly=3.2*math.sqrt(monomers_per_chain)
+Lx=num_particles/density/Lz/Ly
+size                = (Lx, Ly, Lz)
+
+# Create random seed
+tseed = int( time.time() * 1000.0 )
+random.seed( ((tseed & 0xff000000) >> 24) +
+             ((tseed & 0x00ff0000) >>  8) +
+             ((tseed & 0x0000ff00) <<  8) +
+             ((tseed & 0x000000ff) << 24)   )
+irand=random.randint(1,99999)
+
+system = espressopp.System()
+system.rng = espressopp.esutil.RNG()
+system.rng.seed(irand)
+system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
+
 system.skin        = skin
-system.storage     = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
+comm = MPI.COMM_WORLD
+if comm.size>4 and comm.size%4 ==0:
+  nodeGrid = espressopp.Int3D(comm.size/4,2,2)
+else:
+  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
+cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
+system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
 # ==================================================================================================
 # Read configuration from file
@@ -118,7 +135,7 @@ system.storage     = espressopp.storage.DomainDecomposition(system, nodeGrid, ce
 file = open(restartfile, 'r')
 number_of_particles_in_file  = int(file.readline())
 box_volume                   = file.readline().split()
-if N_chains * N_chainlength != number_of_particles_in_file:
+if num_chains * monomers_per_chain != number_of_particles_in_file:
     print("ERROR: wrong number of particles in restart file")
     file.close()
     sys.exit()
@@ -129,13 +146,13 @@ angles = []
 next_nearest_neighbors = []
 nearest_neighbors      = []
 
-particle_id  = 0
+particle_id  = 1
 
-for i in range(N_chains):
+for i in range(num_chains):
 
     polymer_chain             = []
 
-    for k in range(N_chainlength):
+    for k in range(monomers_per_chain):
 
         col       = file.readline().split()
         part_id   = int(col[0])
@@ -153,16 +170,16 @@ for i in range(N_chains):
         particle     = [part_id, part_pos, part_type, part_vel]
         polymer_chain.append(particle)
 
-        if k < N_chainlength-1:
+        if k < monomers_per_chain-1:
             bonds.append((particle_id+k,particle_id+k+1))
 
-        if k < N_chainlength-2:
+        if k < monomers_per_chain-2:
             angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
 
     system.storage.addParticles(polymer_chain, 'id', 'pos', 'type', 'v')
     system.storage.decompose()
 
-    particle_id += N_chainlength
+    particle_id += monomers_per_chain
 
 file.close()
 
@@ -242,10 +259,10 @@ output.write(time.strftime('%a, %d %b %Y %H:%M:%S'))
 output.write('\n\n%s\n\n'                            % espressopp.Version().info())
 output.write('random seed           = %d \n'         % seed)
 output.write('number of CPUs        = %d \n'         % espressopp.MPI.COMM_WORLD.size)
-output.write('number of particles   = %d \n'         % N_particles)
-output.write('number of chains      = %d \n'         % N_chains)
-output.write('chain length          = %d \n'         % N_chainlength)
-output.write('simulation box        = (%f,%f,%f) \n' % (box[0],box[1],box[2]))
+output.write('number of particles   = %d \n'         % num_particles)
+output.write('number of chains      = %d \n'         % num_chains)
+output.write('chain length          = %d \n'         % monomers_per_chain)
+output.write('simulation box        = (%f,%f,%f) \n' % (size[0],size[1],size[2]))
 output.write('density               = %f \n'         % density)
 output.write('rc                    = %.2f \n'       % rc)
 output.write('skin                  = %.2f \n'       % system.skin)
@@ -281,7 +298,7 @@ output.close()
 temperature    = espressopp.analysis.Temperature(system)
 pressure       = espressopp.analysis.Pressure(system)
 pressureTensor = espressopp.analysis.PressureTensor(system)
-msid           = espressopp.analysis.MeanSquareInternalDist(system,N_chainlength)
+msid           = espressopp.analysis.MeanSquareInternalDist(system,monomers_per_chain)
 
 def analyze_info(step,tau,step_type):
 
@@ -294,7 +311,7 @@ def analyze_info(step,tau,step_type):
   tt     = ''
 
   for k in range(system.getNumberOfInteractions()):
-    e       = system.getInteraction(k).computeEnergy()/N_particles
+    e       = system.getInteraction(k).computeEnergy()/num_particles
     Etotal += e
     tot    += ' %12.8f' % e
     tt     += '      e%d     ' % k
@@ -355,7 +372,7 @@ if not restart and restart_type == 'warmup':
     system.addInteraction(Cosine_interaction)
 
     if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = N_chainlength)
+        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
 
     if restart_type != 'warmup':
         i = 0
@@ -378,7 +395,7 @@ if not restart and restart_type == 'warmup':
         result = msid.compute()
 
         file = open("intdist_warmup_%d.txt" % i,"w")
-        for c in range(N_chainlength-1):
+        for c in range(monomers_per_chain-1):
             line = "%d %f\n" % (c+1,result[c]/(c+1))
             file.write(line)
         file.close()
@@ -446,7 +463,7 @@ if not restart and restart_type == 'warmup':
     result = msid.compute()
 
     file = open("intdist_warmup_%d.txt" % i,"w")
-    for c in range(N_chainlength-1):
+    for c in range(monomers_per_chain-1):
        line = "%d %f\n" % (c+1,result[c]/(c+1))
        file.write(line)
     file.close()
@@ -495,7 +512,7 @@ if not restart and restart_type == 'relax':
     system.addInteraction(Cosine_interaction)
 
     if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = N_chainlength)
+        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
 
     if restart_type != 'relax':
         i   = 0
@@ -577,7 +594,7 @@ if not restart and restart_type == 'equil':
     system.addInteraction(Cosine_interaction)
 
     if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = N_chainlength)
+        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
 
     if restart_type != 'equil':
         i = 0
@@ -600,7 +617,7 @@ if not restart and restart_type == 'equil':
         result = msid.compute()
 
         file = open("intdist_equil_%d.txt" % i,"w")
-        for c in range(N_chainlength-1):
+        for c in range(monomers_per_chain-1):
             line = "%d %f\n" % (c+1,result[c]/(c+1))
             file.write(line)
         file.close()
@@ -631,7 +648,7 @@ if not restart and restart_type == 'equil':
     result = msid.compute()
 
     file = open("intdist_equil_%d.txt" % i,"w")
-    for c in range(N_chainlength-1):
+    for c in range(monomers_per_chain-1):
        line = "%d %f\n" % (c+1,result[c]/(c+1))
        file.write(line)
     file.close()
