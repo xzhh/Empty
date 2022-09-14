@@ -60,7 +60,7 @@ timestep = 0.002
 seed               = 654321  # seed for random
 density            = 0.84
 bondlen            = 0.97
-monomers_per_chain = 100      # the number of monomers per a chain
+monomers_per_chain = 50      # the number of monomers per a chain
 num_chains         = 15*monomers_per_chain     # the number of chains
 nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
@@ -127,8 +127,8 @@ mass     = 1.0
 chain = []
 for i in range(num_chains):
   startpos = system.bc.getRandomPos()
-  #positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, return_angles=True, rng=None)#system.rng)
-  positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
+  positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, return_angles=True, rng=None)#system.rng)
+  #positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
   for k in range(monomers_per_chain):
     part = [pid + k, chain_type, mass, positions[k], vel_zero]
     chain.append(part)
@@ -140,13 +140,13 @@ for i in range(num_chains):
   bondlist.addBonds(bonds)
   #if (ifring):
   #  bondlist.addBonds([(pid-1,pid-monomers_per_chain)])
-  #anglelist.addTriples(angles)
-  #print bonds
-  #print angles
+  anglelist.addTriples(angles)
+  print(bonds)
+  print(angles)
   #print positions[0]
-  #sys.exit(0)
+  sys.exit(0)
 system.storage.decompose()
-
+sys.exit(0)
 # Lennard-Jones with Verlet list (distinguish by intra- 
 # and inter-molecular interactions)
 vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)

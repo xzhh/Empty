@@ -3,8 +3,14 @@
 import os
 import sys
 import time
+import random
+import math
+import mpi4py.MPI as MPI
 import espressopp
-from math import sqrt
+import logging
+from espressopp import Real3D, Int3D
+from espressopp.tools import lammps, gromacs
+from espressopp.tools import decomp, timers, replicate
 
 start_time = time.time()
 
@@ -50,7 +56,7 @@ sigma              = 1.0
 epsilon            = 1.0
 temperature        = 1.0
 
-skin               = 1.0
+skin               = 0.3 #1.0
 rc                 = pow(2, 1.0/6.0) * sigma
 
 LJ_capradius_initial  = pow(2, 1.0/6.0) * sigma
@@ -127,6 +133,9 @@ else:
 cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
+print("NodeGRID: ",nodeGrid)
+print("CellGRID: ",cellGrid)
+
 # ==================================================================================================
 # Read configuration from file
 # ==================================================================================================
@@ -140,22 +149,28 @@ if num_chains * monomers_per_chain != number_of_particles_in_file:
     file.close()
     sys.exit()
 
-bonds  = []
-angles = []
+FENE_pair_bonds            = espressopp.FixedPairList(system.storage)
+Cosine_angle_bonds         = espressopp.FixedTripleList(system.storage)
 
 next_nearest_neighbors = []
 nearest_neighbors      = []
-
+mass     = 1.0
+props    = ['id', 'type', 'mass', 'pos', 'v']
+vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 particle_id  = 1
+p_incr = 0
 
 for i in range(num_chains):
 
     polymer_chain             = []
-
+    bonds = []
+    angles = []
     for k in range(monomers_per_chain):
 
         col       = file.readline().split()
         part_id   = int(col[0])
+        if part_id == 0:
+            p_incr = 1
 
         if (len(col) == 8 or len(col) == 5):
             part_type = int(col[1])
@@ -167,31 +182,34 @@ for i in range(num_chains):
             part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
             part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
-        particle     = [part_id, part_pos, part_type, part_vel]
+        particle     = [part_id+p_incr, part_type, mass, part_pos, part_vel]
         polymer_chain.append(particle)
-
+        
+        print(part_id+p_incr,particle_id)
+        
         if k < monomers_per_chain-1:
             bonds.append((particle_id+k,particle_id+k+1))
 
         if k < monomers_per_chain-2:
             angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
 
-    system.storage.addParticles(polymer_chain, 'id', 'pos', 'type', 'v')
+    system.storage.addParticles(polymer_chain, *props)
     system.storage.decompose()
-
+    print(bonds)
+    print(angles)
+    FENE_pair_bonds.addBonds(bonds)
+    Cosine_angle_bonds.addTriples(angles)
+    
+    sys.exit(0)
     particle_id += monomers_per_chain
 
 file.close()
-
+system.storage.decompose()
+print("QUIT: ",warmup_start_time,restart_type)
+sys.exit(0)
 # ==================================================================================================
 # Define non bonded pair, bonded pair and bonded angular interaction lists
 # ==================================================================================================
-
-FENE_pair_bonds            = espressopp.FixedPairList(system.storage)
-Cosine_angle_bonds         = espressopp.FixedTripleList(system.storage)
-
-FENE_pair_bonds.addBonds(bonds)
-Cosine_angle_bonds.addTriples(angles)
 
 WCA_verlet_list            = espressopp.VerletList(system, cutoff = rc)
 WCA_verlet_list_warmup     = espressopp.VerletList(system, cutoff = rc)
@@ -257,7 +275,7 @@ integrator.addExtension(langevin)
 output = open('info_%s.txt' % sys.argv[0][:-3] ,'a')
 output.write(time.strftime('%a, %d %b %Y %H:%M:%S'))
 output.write('\n\n%s\n\n'                            % espressopp.Version().info())
-output.write('random seed           = %d \n'         % seed)
+output.write('random seed           = %d \n'         % irand)
 output.write('number of CPUs        = %d \n'         % espressopp.MPI.COMM_WORLD.size)
 output.write('number of particles   = %d \n'         % num_particles)
 output.write('number of chains      = %d \n'         % num_chains)
