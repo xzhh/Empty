@@ -133,9 +133,6 @@ else:
 cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
-print("NodeGRID: ",nodeGrid)
-print("CellGRID: ",cellGrid)
-
 # ==================================================================================================
 # Read configuration from file
 # ==================================================================================================
@@ -161,43 +158,11 @@ vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 particle_id  = 1
 p_incr = 0
 
-###########################
-pid      = 1
-chain = []
-for i in range(0):
-  startpos = system.bc.getRandomPos()
-  positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
-  #positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
-  for k in range(monomers_per_chain):
-    part = [pid + k, 0, mass, positions[k], vel_zero]
-    chain.append(part)
-  pid += monomers_per_chain
-  #chain_type += 1
-  system.storage.addParticles(chain, *props)
-  system.storage.decompose()
-  chain = []
-  FENE_pair_bonds.addBonds(bonds)
-  Cosine_angle_bonds.addTriples(angles)
-  
-  #print(type(positions))
-  #print(type(part))
-  #sys.exit(0)
-#  print("--------------------")
-#sys.exit(0)
 
-self_create=False
 for i in range(num_chains):
   polymer_chain       = []
   bonds = []
   angles = []
-  
-  if self_create:
-    startpos = system.bc.getRandomPos()
-    part_pos, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
-    part_type = 0
-    part_vel = vel_zero
-    #print(type(part_pos))
-    #print(type(part_vel))
   
   for k in range(monomers_per_chain):
     col     = file.readline().split()
@@ -205,35 +170,30 @@ for i in range(num_chains):
     if part_id == 0:
       p_incr = 1
 
-    if not self_create:
-      if (len(col) == 8 or len(col) == 5):
-        part_type = int(col[1])
-        part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
-        part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
-	  
-      elif (len(col) == 7 or len(col) == 4):
-        part_type = 0
-        part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
-        part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
+    if (len(col) == 8 or len(col) == 5):
+      part_type = int(col[1])
+      part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
+      part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
+	
+    elif (len(col) == 7 or len(col) == 4):
+      part_type = 0
+      part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
+      part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
     #print(type(part_pos),type(part_pos[0]))
     #print(type(part_vel),type(part_vel[0]))
-    if not self_create:
-      particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
-    else:
-      particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
+    particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
     polymer_chain.append(particle)
-    if k<5:
-      print("ID %d - INFO: "%(part_id+p_incr),particle)
+    #if k<5:
+    #  print("ID %d - INFO: "%(part_id+p_incr),particle)
    
-    if not self_create:
-      bonds = []
-      angles = []
-      if k < monomers_per_chain-1:
-        bonds.append((particle_id+k,particle_id+k+1))
-	  
-      if k < monomers_per_chain-2:
-        angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
+    bonds = []
+    angles = []
+    if k < monomers_per_chain-1:
+      bonds.append((particle_id+k,particle_id+k+1))
+	
+    if k < monomers_per_chain-2:
+      angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
 
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
