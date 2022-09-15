@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import os
 import sys
 import time
 import random
@@ -11,6 +10,7 @@ import logging
 from espressopp import Real3D, Int3D
 from espressopp.tools import lammps, gromacs
 from espressopp.tools import decomp, timers, replicate
+import os
 
 start_time = time.time()
 
@@ -144,6 +144,7 @@ print("CellGRID: ",cellGrid)
 file = open(restartfile, 'r')
 number_of_particles_in_file  = int(file.readline())
 box_volume                   = file.readline().split()
+print("BOX: ",box_volume)
 if num_chains * monomers_per_chain != number_of_particles_in_file:
     print("ERROR: wrong number of particles in restart file")
     file.close()
@@ -160,48 +161,82 @@ vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 particle_id  = 1
 p_incr = 0
 
+###########################
+pid      = 1
+chain = []
+for i in range(0):
+  startpos = system.bc.getRandomPos()
+  positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
+  #positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
+  for k in range(monomers_per_chain):
+    part = [pid + k, 0, mass, positions[k], vel_zero]
+    chain.append(part)
+  pid += monomers_per_chain
+  #chain_type += 1
+  system.storage.addParticles(chain, *props)
+  system.storage.decompose()
+  chain = []
+  FENE_pair_bonds.addBonds(bonds)
+  Cosine_angle_bonds.addTriples(angles)
+  
+  #print(type(positions))
+  #print(type(part))
+  #sys.exit(0)
+#  print("--------------------")
+#sys.exit(0)
+
 for i in range(num_chains):
+  polymer_chain       = []
+  bonds = []
+  angles = []
+  
+  startpos = system.bc.getRandomPos()
+  part_pos, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
+  part_type = 0
+  part_vel = vel_zero
+  #print(type(part_pos))
+  #print(type(part_vel))
+  
+  for k in range(monomers_per_chain):
+    col     = file.readline().split()
+    part_id   = int(col[0])
+    if part_id == 0:
+      p_incr = 1
 
-    polymer_chain             = []
-    bonds = []
-    angles = []
-    for k in range(monomers_per_chain):
+    if (len(col) == 8 or len(col) == 5):
+      part_type = int(col[1])
+      part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
+      part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
+	
+    elif (len(col) == 7 or len(col) == 4):
+      part_type = 0
+      part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
+      part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
-        col       = file.readline().split()
-        part_id   = int(col[0])
-        if part_id == 0:
-            p_incr = 1
-
-        if (len(col) == 8 or len(col) == 5):
-            part_type = int(col[1])
-            part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
-            part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
-
-        elif (len(col) == 7 or len(col) == 4):
-            part_type = 0
-            part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
-            part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
-
-        particle     = [part_id+p_incr, part_type, mass, part_pos, part_vel]
-        polymer_chain.append(particle)
-        
-        print(part_id+p_incr,particle_id)
-        
-        if k < monomers_per_chain-1:
-            bonds.append((particle_id+k,particle_id+k+1))
-
-        if k < monomers_per_chain-2:
-            angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
-
-    system.storage.addParticles(polymer_chain, *props)
-    system.storage.decompose()
-    print(bonds)
-    print(angles)
-    FENE_pair_bonds.addBonds(bonds)
-    Cosine_angle_bonds.addTriples(angles)
+    #print(type(part_pos),type(part_pos[0]))
+    #print(type(part_vel),type(part_vel[0]))
+    particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
+    #particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
+    polymer_chain.append(particle)
     
+    #if k < monomers_per_chain-1:
+    #  bonds.append((particle_id+k,particle_id+k+1))
+	#
+    #if k < monomers_per_chain-2:
+    #  angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
+
+  system.storage.addParticles(polymer_chain, *props)
+  system.storage.decompose()
+  #print(polymer_chain)
+  FENE_pair_bonds.addBonds(bonds)
+  Cosine_angle_bonds.addTriples(angles)
+  
+  del polymer_chain
+  del bonds
+  del angles
+  if i>0:
     sys.exit(0)
-    particle_id += monomers_per_chain
+  particle_id += monomers_per_chain
 
 file.close()
 system.storage.decompose()
