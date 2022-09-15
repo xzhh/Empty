@@ -185,7 +185,7 @@ for i in range(0):
 #  print("--------------------")
 #sys.exit(0)
 
-self_create=True
+self_create=False
 for i in range(num_chains):
   polymer_chain       = []
   bonds = []
@@ -218,13 +218,14 @@ for i in range(num_chains):
 
     #print(type(part_pos),type(part_pos[0]))
     #print(type(part_vel),type(part_vel[0]))
-    print("ID %d - INFO: "%(part_id+p_incr),particle)
     if not self_create:
       particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
-    else
+    else:
       particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
     polymer_chain.append(particle)
-    
+    if k<5:
+      print("ID %d - INFO: "%(part_id+p_incr),particle)
+   
     if not self_create:
       bonds = []
       angles = []
@@ -243,8 +244,8 @@ for i in range(num_chains):
   del polymer_chain
   del bonds
   del angles
-  if i>0:
-    sys.exit(0)
+  #if i>0:
+  #  sys.exit(0)
   particle_id += monomers_per_chain
 
 file.close()
