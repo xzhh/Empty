@@ -295,21 +295,14 @@ angleinteractions=gromacs.setAngleInteractions(system, angletypes, angletypepara
 ##    interd = espressopp.interaction.FixedQuadrupleListTabulatedDihedral(system, fql, potTab)
 ##    system.addInteraction(interd)
 
-
-## langevin thermostat
-#langevin = espressopp.integrator.LangevinThermostat(system)
-#langevin.gamma = 1.0
-#langevin.temperature = 2.4942 # kT in gromacs units
 #DPD
-langevin=espressopp.integrator.DPDThermostat(system, verletlist)
-langevin.gamma=5.0
-langevin.tgamma=0.0
-langevin.temperature = 2.4942
-
+dpd=espressopp.integrator.DPDThermostat(system, verletlist, num_particles)
+dpd.gamma=5.0
+dpd.tgamma=0.0
+dpd.temperature = 2.4942
 integrator = espressopp.integrator.VelocityVerlet(system)
-integrator.addExtension(langevin)
+integrator.addExtension(dpd)
 integrator.dt = timestep
-
 
 # print simulation parameters
 print('')
@@ -372,13 +365,13 @@ sys.stdout.write(fmt % (0, T, P, Pij[3], Etotal, Ek, Ep, EQQ, Eb, Ea, Ed))
 
 # switch to a second integrator before starting shear flow simulation
 if (shear_rate>0.0):
-  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate)
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=True)
 else:
   integrator2     = espressopp.integrator.VelocityVerlet(system)
 # set the integration step  
 integrator2.dt  = timestep
 integrator2.step = 0
-integrator2.addExtension(langevin)
+integrator2.addExtension(dpd)
 # since the interaction cut-off changed the size of the cells that are used
 # to speed up verlet list builds should be adjusted accordingly 
 #system.storage.cellAdjust()
