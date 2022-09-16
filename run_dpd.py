@@ -296,7 +296,7 @@ angleinteractions=gromacs.setAngleInteractions(system, angletypes, angletypepara
 ##    system.addInteraction(interd)
 
 #DPD
-dpd=espressopp.integrator.DPDThermostat(system, verletlist, num_particles)
+dpd=espressopp.integrator.DPDThermostat(system, vl, num_particles)
 dpd.gamma=5.0
 dpd.tgamma=0.0
 dpd.temperature = 2.4942
