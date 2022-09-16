@@ -129,13 +129,13 @@ timestep = 0.001
 tot_types= 5 # The total num of atomic types, 5 (0~4) in this case
 
 # add shear rate / NSteps
-shear_rate = 0.0
+shear_rate = 0.1
 equi_nloops = 200  # total steps = nloops * isteps
 equi_isteps = 50
 # number of prod loops
-prod_nloops       = 1000000 #10 ns
+prod_nloops       = 20000 #10 ns
 # number of integration steps performed in each production loop
-prod_isteps       = 10
+prod_isteps       = 100
 # set parameters for calculating partial g(r)
 if bool_rdf: 
     rdf_pair = [[0,0], [0,1], [0,2], [0,3], [0,4],
@@ -353,18 +353,9 @@ angleinteractions=gromacs.setAngleInteractions(system, angletypes, angletypepara
 ##    interd = espressopp.interaction.FixedQuadrupleListTabulatedDihedral(system, fql, potTab)
 ##    system.addInteraction(interd)
 
-
-# langevin thermostat
-#langevin = espressopp.integrator.LangevinThermostat(system)
-#langevin.gamma = 0.5
-#langevin.temperature = 2.4942 # kT in gromacs units 
-#integrator = espressopp.integrator.VelocityVerlet(system)
-#integrator.addExtension(langevin)
-#integrator.dt = timestep
-
 # DPD thermostat
 dpd = espressopp.integrator.DPDThermostat(system, vl, num_particles)
-dpd.gamma = 0.5 
+dpd.gamma = 5.0
 dpd.temperature = 2.4942 # kT in gromacs units 
 integrator = espressopp.integrator.VelocityVerlet(system)
 integrator.addExtension(dpd)
@@ -410,6 +401,8 @@ for step in range(equi_nloops):
 print("equilibration finished")
 integrator.resetTimers()
 
+sys.exit(0)
+
 fmt = '%5d %8.4f %11.4f %11.4f %12.3f %12.3f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
 T = temperature.compute()
@@ -435,11 +428,11 @@ sys.stdout.write(fmt % (0, T/constants.k/constants.N_A*1000, P, Pij[3], Etotal, 
 
 # switch to a second integrator before starting shear flow simulation
 if (shear_rate>0.0):
-  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=True)
-  system.lebcMode = 2
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=False)
+  system.lebcMode = 0
 else:
   integrator2     = espressopp.integrator.VelocityVerlet(system)
-  system.lebcMode = 0
+
 # set the integration step  
 integrator2.dt  = timestep
 integrator2.step = 0
