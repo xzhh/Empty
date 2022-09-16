@@ -76,7 +76,7 @@ timestep = 0.001
 tot_types= 5 # The total num of atomic types, 5 (0~4) in this case
 
 # add shear rate / NSteps
-shear_rate = 0.5
+shear_rate = 0.1
 equi_nloops = 200  # total steps = nloops * isteps
 equi_isteps = 50
 # number of prod loops
