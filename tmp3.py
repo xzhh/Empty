@@ -164,22 +164,14 @@ pid = 1
 bonds=[]
 angles=[]
 
-self_create=False
-
 for i in range(num_chains):
   polymer_chain       = []
 
-  if self_create:
-    startpos = system.bc.getRandomPos()
-    part_pos, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
-    part_type = 0
-    part_vel = vel_zero
-    pid+=monomers_per_chain
-    #print(type(part_pos))
-    #print(type(part_vel))
-  else:
-    bonds = []
-    angles = []
+  startpos = system.bc.getRandomPos()
+  part_pos, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
+  part_type = 0
+  part_vel = vel_zero
+  pid+=monomers_per_chain
   
   for k in range(monomers_per_chain):
     col     = file.readline().split()
@@ -187,37 +179,35 @@ for i in range(num_chains):
     if part_id == 0:
       p_incr = 1
 
-    if not self_create:
-      if (len(col) == 8 or len(col) == 5):
-        part_type = int(col[1])
-        part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
-        part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
-	  
-      elif (len(col) == 7 or len(col) == 4):
-        part_type = 0
-        part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
-        part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
+    if (len(col) == 8 or len(col) == 5):
+      part_type = int(col[1])
+      part_pos[k][0]  = float(col[2])
+      part_pos[k][1]  = float(col[3])
+      part_pos[k][2]  = float(col[4])
+      part_vel[0]     = float(col[5])
+      part_vel[1]     = float(col[6])
+      part_vel[2]     = float(col[7])
+	
+    elif (len(col) == 7 or len(col) == 4):
+      part_type = 0
+      part_pos[k][0]  = float(col[1])
+      part_pos[k][1]  = float(col[2])
+      part_pos[k][2]  = float(col[3])
+      part_vel[0]     = float(col[4])
+      part_vel[1]     = float(col[5])
+      part_vel[2]     = float(col[6])
 
     #print(part_pos)
     #print(part_vel)
-    if not self_create:
-      particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
-    else:
-      particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
+    particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
     polymer_chain.append(particle)
     if k<5:
       print("ID %d - INFO: "%(part_id+p_incr),particle,type(particle[3][0]),type(particle[4][0]))
-  #print(type(part_pos))
-  #print(type(part_vel))
-   
-    if not self_create:
-      if k < monomers_per_chain-1:
-        bonds.append((particle_id+k,particle_id+k+1))
-	  
-      if k < monomers_per_chain-2:
-        angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
-  print("BOND: ",len(bonds),type(bonds[0]),type(bonds[0][1]))
-  print(bonds)
+    #print(type(part_pos))
+    #print(type(part_vel))
+
+  #print("BOND: ",len(bonds),type(bonds[0]),type(bonds[0][1]))
+  #print(bonds)
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
   #print(type(angles),type(angles[1]))
