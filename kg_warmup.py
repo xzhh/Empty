@@ -196,22 +196,19 @@ for i in range(num_chains):
 
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
-  #print(polymer_chain)
-  FENE_pair_bonds.addBonds(bonds)
-  Cosine_angle_bonds.addTriples(angles)
   
-  del polymer_chain
-  del bonds
-  del angles
   particle_id += monomers_per_chain
 
 file.close()
-system.storage.decompose()
+#system.storage.decompose()
 #print("QUIT: ",warmup_start_time,restart_type)
 #sys.exit(0)
 # ==================================================================================================
 # Define non bonded pair, bonded pair and bonded angular interaction lists
 # ==================================================================================================
+
+FENE_pair_bonds.addBonds(bonds)
+Cosine_angle_bonds.addTriples(angles)
 
 WCA_verlet_list            = espressopp.VerletList(system, cutoff = rc)
 WCA_verlet_list_warmup     = espressopp.VerletList(system, cutoff = rc)
@@ -361,6 +358,10 @@ def analyze_info(step,tau,step_type):
 # Warm-up
 # ==================================================================================================
 
+conf = espressopp.analysis.Configurations(system)
+conf.capacity=1
+conf.gather()
+
 if not restart and restart_type == 'warmup':
 
     if (k_theta == 0.0): 
@@ -405,6 +406,9 @@ if not restart and restart_type == 'warmup':
     warmup_steps      = warmup_steps_stage_1
     warmup_start_time = time.process_time()
 	
+    integrator.run(10)
+    sys.exit(0)
+
     while not restart and i < warmup_cycles:
 
         cycle_begin_time = time.time()
