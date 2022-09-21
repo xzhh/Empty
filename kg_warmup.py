@@ -141,7 +141,7 @@ system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGr
 file = open(restartfile, 'r')
 number_of_particles_in_file  = int(file.readline())
 box_volume                   = file.readline().split()
-print("BOX: ",box_volume)
+
 if num_chains * monomers_per_chain != number_of_particles_in_file:
     print("ERROR: wrong number of particles in restart file")
     file.close()
@@ -180,20 +180,19 @@ for i in range(num_chains):
       part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
       part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
-    #print(type(part_pos),type(part_pos[0]))
-    #print(type(part_vel),type(part_vel[0]))
     particle   = [part_id+p_incr, part_type, mass, part_pos, part_vel]
     polymer_chain.append(particle)
     #if k<5:
     #  print("ID %d - INFO: "%(part_id+p_incr),particle)
    
-    bonds = []
-    angles = []
+    #bonds = []
+    #angles = []
     if k < monomers_per_chain-1:
       bonds.append((particle_id+k,particle_id+k+1))
 	
     if k < monomers_per_chain-2:
       angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
+    
 
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
@@ -204,14 +203,12 @@ for i in range(num_chains):
   del polymer_chain
   del bonds
   del angles
-  #if i>0:
-  #  sys.exit(0)
   particle_id += monomers_per_chain
 
 file.close()
 system.storage.decompose()
-print("QUIT: ",warmup_start_time,restart_type)
-sys.exit(0)
+#print("QUIT: ",warmup_start_time,restart_type)
+#sys.exit(0)
 # ==================================================================================================
 # Define non bonded pair, bonded pair and bonded angular interaction lists
 # ==================================================================================================
