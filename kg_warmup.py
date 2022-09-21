@@ -257,6 +257,17 @@ FENE_interaction        = espressopp.interaction.FixedPairListFENE(system, FENE_
 # define Cosine angular interaction
 Cosine_interaction      = espressopp.interaction.FixedTripleListCosine(system, Cosine_angle_bonds, potential=espressopp.interaction.Cosine(K=k_theta, theta0=0.0))
 
+
+#print("POSITION BEF. FOLD")
+#idx=4501
+#print(system.storage.getParticle(idx).pos)
+##conf = espressopp.analysis.Configurations(system)
+#conf = espressopp.analysis.ConfigurationsExt(system)
+##conf.unfolded = False
+#conf.capacity=1
+#conf.gather()
+#print(system.storage.getParticle(idx).pos,conf[0][idx])
+#sys.exit(0)
 # ==================================================================================================
 # Setup Velocity Verlet integrator with Langevin thermostat
 # ==================================================================================================
@@ -358,10 +369,6 @@ def analyze_info(step,tau,step_type):
 # Warm-up
 # ==================================================================================================
 
-conf = espressopp.analysis.Configurations(system)
-conf.capacity=1
-conf.gather()
-
 if not restart and restart_type == 'warmup':
 
     if (k_theta == 0.0): 
@@ -405,9 +412,11 @@ if not restart and restart_type == 'warmup':
     integrator.dt     = warmup_timestep
     warmup_steps      = warmup_steps_stage_1
     warmup_start_time = time.process_time()
-	
-    integrator.run(10)
-    sys.exit(0)
+    
+    #espressopp.tools.analyse.info(system, integrator)
+    #integrator.run(10)
+    #espressopp.tools.analyse.info(system, integrator)
+    #sys.exit(0)
 
     while not restart and i < warmup_cycles:
 
