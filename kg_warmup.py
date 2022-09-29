@@ -56,8 +56,21 @@ sigma              = 1.0
 epsilon            = 1.0
 temperature        = 1.0
 
-skin               = 0.3 #1.0
+skin_mc            = 1.0
+skin               = 0.3
 rc                 = pow(2, 1.0/6.0) * sigma
+
+skipEqui=False
+skipPPA=True
+skipProf=True
+skipOri=True
+skipMSID=True
+FLAG_MD=not (skipProf and skipOri)
+# number of prod loops
+prod_nloops       = 20000 #200
+# number of integration steps performed in each production loop
+prod_isteps       = 50
+msid_nloops = prod_nloops/4
 
 LJ_capradius_initial  = pow(2, 1.0/6.0) * sigma
 LJ_capradius_final    = 0.80 * sigma
@@ -69,7 +82,7 @@ LJ_capnext_initial  = rcutnext_initial * sigma
 VMD     = False
 sock    = None
 restart = False
-time_max = 60*60*24
+time_max = 60*60*24*5
 
 # ==================================================================================================
 # Defining simulation parameters
@@ -124,13 +137,13 @@ system.rng = espressopp.esutil.RNG()
 system.rng.seed(irand)
 system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
 
-system.skin        = skin
+system.skin        = skin_mc
 comm = MPI.COMM_WORLD
 if comm.size>4 and comm.size%4 ==0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
-  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
-cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
+  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,system.skin)
+cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,system.skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
 # ==================================================================================================
