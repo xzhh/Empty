@@ -271,16 +271,6 @@ FENE_interaction        = espressopp.interaction.FixedPairListFENE(system, FENE_
 Cosine_interaction      = espressopp.interaction.FixedTripleListCosine(system, Cosine_angle_bonds, potential=espressopp.interaction.Cosine(K=k_theta, theta0=0.0))
 
 
-#print("POSITION BEF. FOLD")
-#idx=4501
-#print(system.storage.getParticle(idx).pos)
-##conf = espressopp.analysis.Configurations(system)
-#conf = espressopp.analysis.ConfigurationsExt(system)
-##conf.unfolded = False
-#conf.capacity=1
-#conf.gather()
-#print(system.storage.getParticle(idx).pos,conf[0][idx])
-#sys.exit(0)
 # ==================================================================================================
 # Setup Velocity Verlet integrator with Langevin thermostat
 # ==================================================================================================

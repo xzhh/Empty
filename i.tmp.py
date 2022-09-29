@@ -47,8 +47,7 @@ rc = 1.12 ##pow(2.0, 1.0/6.0)
 skin = 0.3
 dpd = True
 ifbond = True
-skipEqui=False
-skipPPA=True
+skipPPA=False
 skipProf=True
 skipOri=True
 skipMSID=True
@@ -108,6 +107,15 @@ else:
 cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
+file = open("equil_20.xyz", 'r')
+number_of_particles_in_file  = int(file.readline())
+box_volume                   = file.readline().split()
+
+if num_chains * monomers_per_chain != number_of_particles_in_file:
+  print("ERROR: wrong number of particles in restart file")
+  file.close()
+  sys.exit()
+
 print("NCPUs         = ", comm.size)
 print("nodeGrid      = ", nodeGrid)
 print("cellGrid      = ", cellGrid)
@@ -124,29 +132,43 @@ anglelist = espressopp.FixedTripleList(system.storage)
 pid      = 1
 chain_type = 0
 mass     = 1.0
-chain = []
+
 for i in range(num_chains):
-  startpos = system.bc.getRandomPos()
-  positions, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, return_angles=True, rng=None)#system.rng)
-  #positions, bonds = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, bondlen, rng=system.rng)
+  polymer_chain       = []
+  bonds = []
+  angles = []
+  
   for k in range(monomers_per_chain):
-    part = [pid + k, chain_type, mass, positions[k], vel_zero]
-    chain.append(part)
-  pid += monomers_per_chain
-  #chain_type += 1
-  system.storage.addParticles(chain, *props)
-  system.storage.decompose()
-  chain = []
+    col     = file.readline().split()
+
+    if (len(col) == 8 or len(col) == 5):
+      part_type = int(col[1])
+      part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
+      part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
+	
+    elif (len(col) == 7 or len(col) == 4):
+      part_type = 0
+      part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
+      part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
+
+    particle   = [pid, part_type, mass, part_pos, part_vel]
+    polymer_chain.append(particle)
+   
+    if k < monomers_per_chain-1:
+      bonds.append((pid+k,pid+k+1))
+	
+    if k < monomers_per_chain-2:
+      angles.append((pid+k, pid+k+1, pid+k+2))
+    
+  system.storage.addParticles(polymer_chain, *props)
   bondlist.addBonds(bonds)
-  #if (ifring):
-  #  bondlist.addBonds([(pid-1,pid-monomers_per_chain)])
   anglelist.addTriples(angles)
-  print(bonds)
-  print(angles)
-  #print positions[0]
-  sys.exit(0)
-system.storage.decompose()
-sys.exit(0)
+  system.storage.decompose()
+  
+  pid += monomers_per_chain
+
+file.close()
+
 # Lennard-Jones with Verlet list (distinguish by intra- 
 # and inter-molecular interactions)
 vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
@@ -179,12 +201,10 @@ system.addInteraction(interLJ_intra)
 # Prepare FENE bonds
 if (ifbond):
   print("Num_BondList  = ", bondlist.size())
-  #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
-  #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
-  potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
-  interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
-  #potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
-  #interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
+  #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
+  #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
+  potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
+  interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
   system.addInteraction(interFENE)
 ## Cosine with FixedTriple list
 #   potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
@@ -199,16 +219,16 @@ integrator.dt = timestep
 
 if (dpd):
   vl_all = espressopp.VerletList(system, cutoff = rc + system.skin)
-  langevin=espressopp.integrator.DPDThermostat(system, vl_all)
-  langevin.gamma=5.0
-  langevin.tgamma=0.0
-  langevin.temperature = temperature
-  integrator.addExtension(langevin)
+  thermo=espressopp.integrator.DPDThermostat(system, vl_all)
+  thermo.gamma=5.0
+  thermo.tgamma=0.0
+  thermo.temperature = temperature
+  integrator.addExtension(thermo)
 else:
-  langevin = espressopp.integrator.LangevinThermostat(system)
-  langevin.gamma = 5.0
-  langevin.temperature = temperature
-  integrator.addExtension(langevin)
+  thermo = espressopp.integrator.LangevinThermostat(system)
+  thermo.gamma = 5.0
+  thermo.temperature = temperature
+  integrator.addExtension(thermo)
   
   
 system.bc          = espressopp.bc.OrthorhombicBC(system.rng, size)
@@ -220,7 +240,7 @@ print('density = %.4f' % (density))
 print('rc =', rc)
 print('dt =', integrator.dt)
 print('skin =', system.skin)
-print('thermostat(DPD) =', dpd)
+print('thermostat =', dpd)
 print('steps =', prod_nloops*prod_isteps)
 print('NodeGrid = %s' % (nodeGrid))
 print('CellGrid = %s' % (cellGrid))
@@ -235,100 +255,37 @@ pressureTensor = espressopp.analysis.PressureTensor(system)
 
 fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
-#integrator.run(0)
-##espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+integrator.run(0)
+#espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
 #sys.exit(0)
-
-steepest = espressopp.integrator.MinimizeEnergy(system, gamma=0.001, ftol=0.1, max_displacement=0.001, variable_step_flag=False)
-for k in range(50):
-  steepest.run(10)
-  if (math.isnan(interFENE.computeEnergy())):
-    print("FENE becomes NaN after minimization")
-    sys.exit(0)
-  espressopp.tools.analyse.info(system, steepest)
-#espressopp.tools.pdbwrite('input.pdb', system, molsize=20,typenames=None)
-#sys.exit(0)
-
-#Warm-up
-print("starting warm-up ...")
-espressopp.tools.analyse.info(system, integrator)
-for step in range(warmup_nloops):
-  # incresing strength of force
-  potLJ.epsilon = max((step+1.0)/warmup_nloops,0.01)*1.0
-  interLJ.setPotential(type1=0, type2=0, potential=potLJ)
-  #if (ifbond):
-  #  potFENE.K= (step+1.0)/warmup_nloops*30.0
-  #  interFENE.setPotential(potential=potFENE)
-  
-  # perform warmup_isteps integraton steps
-  #print "STEP ",step,"> ",potLJ.epsilon,potFENE.K
-  integrator.run(warmup_isteps)
-  # print status info
-  espressopp.tools.analyse.info(system, integrator) 
-  if (math.isnan(interFENE.computeEnergy())):
-    print("FENE becomes NaN after warm-up")
-    sys.exit(0)
-  
-print("warmup finished")
-
-#replace the capped potential
-if (ifbond):
-  system.removeInteraction(2) 
-  potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
-  interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
-  system.addInteraction(interFENE)
-
-#Equilibration
-print("starting equilibration ...")
-espressopp.tools.analyse.info(system, integrator)
-for step in range(equi_nloops):
-  integrator.run(equi_isteps)
-  espressopp.tools.analyse.info(system, integrator)
-  if (math.isnan(interFENE.computeEnergy())):
-    print("FENE becomes NaN after equilibration")
-    sys.exit(0)
-print("equilibration finished")
-print("NRESORT>", integrator.getNumResorts())
-
-#T = temperature.compute()
-#P = pressure.compute()
-#Pij = pressureTensor.compute()
-#Ek = 0.5 * T * (3 * num_particles)
-#Ep = interLJ.computeEnergy()
-#Eb = interFENE.computeEnergy()
-#Ea = interCosine.computeEnergy()
-#Etotal = Ek + Ep + Eb + Ea
-#sys.stdout.write(' step     T          P       Pxy        etotal      ekinetic      epair        ebond       eangle\n')
-#sys.stdout.write(fmt % (0, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
-
-########################################################################
-# RUN shear flow MD                                                  #
-########################################################################
-
 # cancelling thermostat
-#langevin.disconnect()
+#thermo.disconnect()
 # set all integrator timers to zero again (they were increased during warmup)
 integrator.resetTimers()
 # set integrator time step to zero again
 integrator.step = 0
 
+#print("equilibration finished")
+#print("NRESORT>", integrator.getNumResorts())
+
+########################################################################
+# RUN shear flow MD                                                  #
+########################################################################
+
+
 if (shear_rate>0.0):
-  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate)
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=True)
 else:
   integrator2     = espressopp.integrator.VelocityVerlet(system)
 # set the integration step  
 integrator2.dt  = timestep
 integrator2.step = 0
 
-integrator2.addExtension(langevin)
+integrator2.addExtension(thermo)
 #fixpositions = espressopp.integrator.FixPositions(system, fixedWall, fixMask)
 #integrator2.addExtension(fixpositions)
-# Define a Lees-Edwards BC instead of std orthorhombic
 
-#system.bc=espressopp.bc.LeesEdwardsBC(system.rng, integrator2, size, shear=shear_rate)
-
-# since the interaction cut-off changed the size of the cells that are used
-# to speed up verlet list builds should be adjusted accordingly 
+#IMPORTANT
 system.storage.cellAdjust()
 
 print("starting production ...")
@@ -419,7 +376,7 @@ for step in range(prod_nloops+1):
       
       #collect end-to-end orientation (normailized)
       if not skipOri:
-        print("Current Ori is wrong(shearOffset)")
+        print("Current Orientation is wrong(shearOffset)")
         sys.exit(0)
         mono_idx=(j-1)%monomers_per_chain
         chain_idx=(j-1-mono_idx)/monomers_per_chain
@@ -516,7 +473,7 @@ if not skipPPA:
   system.removeInteraction(2) 
   system.removeInteraction(1) 
   #system.removeInteraction(0) 
-  langevin.disconnect()
+  thermo.disconnect()
   # the equilibration uses a different interaction cutoff therefore the current
   # verlet list is not needed any more and would waste only CPU time
   
