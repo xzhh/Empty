@@ -130,13 +130,14 @@ vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 bondlist = espressopp.FixedPairList(system.storage)
 anglelist = espressopp.FixedTripleList(system.storage)
 pid      = 1
-chain_type = 0
 mass     = 1.0
 
+bonds = []
+angles = []
 for i in range(num_chains):
   polymer_chain       = []
-  bonds = []
-  angles = []
+  #bonds = []
+  #angles = []
   
   for k in range(monomers_per_chain):
     col     = file.readline().split()
@@ -160,19 +161,24 @@ for i in range(num_chains):
     if k < monomers_per_chain-2:
       angles.append((pid+k, pid+k+1, pid+k+2))
     
+  #print(len(col),bonds)
+
   system.storage.addParticles(polymer_chain, *props)
-  bondlist.addBonds(bonds)
-  anglelist.addTriples(angles)
   system.storage.decompose()
-  
+ 
   pid += monomers_per_chain
 
 file.close()
 
+bondlist.addBonds(bonds)
+anglelist.addTriples(angles)
+del bonds
+del angles
+#sys.exit(0) 
+
 # Lennard-Jones with Verlet list (distinguish by intra- 
 # and inter-molecular interactions)
 vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
-vl_intra = espressopp.FixedPairList(system.storage)
 
 for nc in range(num_chains):
   exlist=[]
@@ -183,9 +189,6 @@ for nc in range(num_chains):
   del exlist
 
 #vl_inter.exclude(exlist)
-#vl_intra.addBonds(exlist)
-#exlist=[]
-#print("BONDS: ",type(exlist),exlist[0:10])
 #sys.exit(0)
 
 # Prepare LJ potentials
@@ -219,7 +222,7 @@ integrator.dt = timestep
 
 if (dpd):
   vl_all = espressopp.VerletList(system, cutoff = rc + system.skin)
-  thermo=espressopp.integrator.DPDThermostat(system, vl_all)
+  thermo=espressopp.integrator.DPDThermostat(system, vl_all, ntotal=num_particles)
   thermo.gamma=5.0
   thermo.tgamma=0.0
   thermo.temperature = temperature
@@ -229,7 +232,6 @@ else:
   thermo.gamma = 5.0
   thermo.temperature = temperature
   integrator.addExtension(thermo)
-  
   
 system.bc          = espressopp.bc.OrthorhombicBC(system.rng, size)
 
@@ -256,8 +258,8 @@ pressureTensor = espressopp.analysis.PressureTensor(system)
 fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
 integrator.run(0)
-#espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
-#sys.exit(0)
+espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+
 # cancelling thermostat
 #thermo.disconnect()
 # set all integrator timers to zero again (they were increased during warmup)
