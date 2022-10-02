@@ -176,30 +176,12 @@ del bonds
 del angles
 #sys.exit(0) 
 
-# Lennard-Jones with Verlet list (distinguish by intra- 
-# and inter-molecular interactions)
-vl_inter = espressopp.VerletList(system, cutoff = rc + system.skin)
-
-for nc in range(num_chains):
-  exlist=[]
-  for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
-    for j in range(i+1,(nc+1)*monomers_per_chain+1):
-      exlist.append((i,j))
-  #vl_inter.exclude(exlist)
-  del exlist
-
-#vl_inter.exclude(exlist)
-#sys.exit(0)
-
-# Prepare LJ potentials
-potLJ = espressopp.interaction.LennardJones(0.01, 1.0, cutoff = rc, shift = "auto")
-interLJ = espressopp.interaction.VerletListLennardJones(vl_inter)
+# Lennard-Jones with Verlet list
+vl = espressopp.VerletList(system, cutoff = rc + system.skin)
+potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+interLJ = espressopp.interaction.VerletListLennardJones(vl)
 interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
 system.addInteraction(interLJ)
-
-potLJ_intra = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-interLJ_intra = espressopp.interaction.FixedPairListLennardJones(system,vl_intra,potLJ_intra)
-system.addInteraction(interLJ_intra)
 
 # Prepare FENE bonds
 if (ifbond):
@@ -209,11 +191,11 @@ if (ifbond):
   potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
   interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
   system.addInteraction(interFENE)
-## Cosine with FixedTriple list
-#   potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
-#   interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
-#   #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
-#   system.addInteraction(interCosine)
+# Cosine with FixedTriple list
+  potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
+  interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
+  #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
+  system.addInteraction(interCosine)
 
 
 # integrator
@@ -221,8 +203,7 @@ integrator = espressopp.integrator.VelocityVerlet(system)
 integrator.dt = timestep
 
 if (dpd):
-  vl_all = espressopp.VerletList(system, cutoff = rc + system.skin)
-  thermo=espressopp.integrator.DPDThermostat(system, vl_all, ntotal=num_particles)
+  thermo=espressopp.integrator.DPDThermostat(system, vl, ntotal=num_particles)
   thermo.gamma=5.0
   thermo.tgamma=0.0
   thermo.temperature = temperature
@@ -259,6 +240,7 @@ fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
 integrator.run(0)
 espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+#sys.exit(0)
 
 # cancelling thermostat
 #thermo.disconnect()
