@@ -56,21 +56,8 @@ sigma              = 1.0
 epsilon            = 1.0
 temperature        = 1.0
 
-skin_mc            = 1.0
-skin               = 0.3
+skin               = 1.0
 rc                 = pow(2, 1.0/6.0) * sigma
-
-skipEqui=False
-skipPPA=True
-skipProf=True
-skipOri=True
-skipMSID=True
-FLAG_MD=not (skipProf and skipOri)
-# number of prod loops
-prod_nloops       = 20000 #200
-# number of integration steps performed in each production loop
-prod_isteps       = 50
-msid_nloops = prod_nloops/4
 
 LJ_capradius_initial  = pow(2, 1.0/6.0) * sigma
 LJ_capradius_final    = 0.80 * sigma
@@ -82,7 +69,7 @@ LJ_capnext_initial  = rcutnext_initial * sigma
 VMD     = False
 sock    = None
 restart = False
-time_max = 60*60*24*5
+time_max = 60*60*24
 
 # ==================================================================================================
 # Defining simulation parameters
@@ -102,7 +89,7 @@ relax_steps          = 100000
 relax_timestep       = 0.001
 relax_gamma          = 0.5
 
-equil_cycles         = 10
+equil_cycles         = 20
 equil_steps          = 200000
 equil_timestep       = 0.005
 equil_gamma          = 0.5
@@ -137,19 +124,19 @@ system.rng = espressopp.esutil.RNG()
 system.rng.seed(irand)
 system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
 
-system.skin        = skin_mc
+system.skin        = skin
 comm = MPI.COMM_WORLD
 if comm.size>4 and comm.size%4 ==0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
-  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,system.skin)
-cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,system.skin)
+  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
+cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
 # ==================================================================================================
 # Read configuration from file
 # ==================================================================================================
-#print("RST_FILE: ",restartfile,restart_type)
+print("RST_FILE: ",restartfile,restart_type)
 #sys.exit(0)
 file = open(restartfile, 'r')
 number_of_particles_in_file  = int(file.readline())
@@ -170,7 +157,6 @@ props    = ['id', 'type', 'mass', 'pos', 'v']
 vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 particle_id  = 1
 p_incr = 0
-
 
 for i in range(num_chains):
   polymer_chain       = []
@@ -206,22 +192,21 @@ for i in range(num_chains):
     if k < monomers_per_chain-2:
       angles.append((particle_id+k, particle_id+k+1, particle_id+k+2))
     
-
+  #print(angles)
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
+  FENE_pair_bonds.addBonds(bonds)
+  Cosine_angle_bonds.addTriples(angles)
   
   particle_id += monomers_per_chain
 
 file.close()
-#system.storage.decompose()
+system.storage.decompose()
 #print("QUIT: ",warmup_start_time,restart_type)
 #sys.exit(0)
 # ==================================================================================================
 # Define non bonded pair, bonded pair and bonded angular interaction lists
 # ==================================================================================================
-
-FENE_pair_bonds.addBonds(bonds)
-Cosine_angle_bonds.addTriples(angles)
 
 WCA_verlet_list            = espressopp.VerletList(system, cutoff = rc)
 WCA_verlet_list_warmup     = espressopp.VerletList(system, cutoff = rc)
@@ -271,6 +256,17 @@ FENE_interaction        = espressopp.interaction.FixedPairListFENE(system, FENE_
 Cosine_interaction      = espressopp.interaction.FixedTripleListCosine(system, Cosine_angle_bonds, potential=espressopp.interaction.Cosine(K=k_theta, theta0=0.0))
 
 
+#print("POSITION BEF. FOLD")
+#idx=4501
+##print(system.storage.getParticle(idx).pos)
+#conf = espressopp.analysis.Configurations(system)
+##conf = espressopp.analysis.ConfigurationsExt(system)
+##conf.unfolded = False
+#conf.capacity=1
+#conf.gather()
+#ctmp=conf[0]
+##print(system.storage.getParticle(idx).pos,conf[0][idx])
+#sys.exit(0)
 # ==================================================================================================
 # Setup Velocity Verlet integrator with Langevin thermostat
 # ==================================================================================================
@@ -425,7 +421,8 @@ if not restart and restart_type == 'warmup':
 
         cycle_begin_time = time.time()
 
-        espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system)
+        #espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system, unfolded = True)
+        espressopp.tools.writexyz('warmup_%d.xyz' % i, system, unfolded = True, append = False)
         
         msid.gather()
         result = msid.compute()
@@ -493,7 +490,8 @@ if not restart and restart_type == 'warmup':
         print("warmup i: ", i , "restart: ", restart)
 
     analyze_info(i,tau, 'warmup')
-    espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system)
+    #espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system, unfolded = True)
+    espressopp.tools.writexyz('warmup_%d.xyz' % i, system, unfolded = True, append = False)
 
     msid.gather()
     result = msid.compute()
@@ -565,7 +563,8 @@ if not restart and restart_type == 'relax':
         cycle_begin_time = time.time()
 
         analyze_info(i,tau, 'relax')
-        espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system)
+        #espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system, unfolded = True)
+        espressopp.tools.writexyz('relax_%d.xyz' % i, system, unfolded = True, append = False)
 
         output = open('lastcycle.txt' ,'w')
         output.write('%d %d %s %f' % (i, tau,'relax',0.0) )
@@ -587,7 +586,8 @@ if not restart and restart_type == 'relax':
         print("relax i: ", i , "restart: ", restart)
         
     analyze_info(i,tau, 'relax')
-    espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system)
+    #espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system, unfolded = True)
+    espressopp.tools.writexyz('relax_%d.xyz' % i, system, unfolded = True, append = False)
 
     if (i == relax_cycles):
 
@@ -647,7 +647,8 @@ if not restart and restart_type == 'equil':
         cycle_begin_time = time.time()
 
         analyze_info(i,tau, 'equil')
-        espressopp.tools.fastwritexyz('equil_%d.xyz' % i, system)
+        #espressopp.tools.fastwritexyz('equil_%d.xyz' % i, system, unfolded = True)
+        espressopp.tools.writexyz('equil_%d.xyz' % i, system, unfolded = True, append = False)
 
         msid.gather()
         result = msid.compute()
@@ -678,7 +679,8 @@ if not restart and restart_type == 'equil':
         print("equil i: ", i , "restart: ", restart)
 
     analyze_info(i,tau, 'equil')
-    espressopp.tools.fastwritexyz('equil_%d.xyz' % i, system)
+    espressopp.tools.fastwritexyz('equil_%d.f.xyz' % i, system, unfolded = True)
+    espressopp.tools.writexyz('equil_%d.xyz' % i, system, unfolded = True, append = False)
 
     msid.gather()
     result = msid.compute()

@@ -1,115 +1,82 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
+#
+#  Copyright (C) 2013-2017(H)
+#      Max Planck Institute for Polymer Research
+#
+#  This file is part of ESPResSo++.
+#  
+#  ESPResSo++ is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#  
+#  ESPResSo++ is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#  
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# 
+# -*- coding: utf-8 -*-
+#
+###########################################################################
+#                                                                         #
+#  ESPResSo++ Benchmark Python script for a polymer melt                  #
+#                                                                         #
+###########################################################################
 
 import sys
 import time
+import espressopp
 import random
 import math
 import mpi4py.MPI as MPI
-import espressopp
 import logging
 from espressopp import Real3D, Int3D
 from espressopp.tools import lammps, gromacs
 from espressopp.tools import decomp, timers, replicate
 import os
-
-start_time = time.time()
-
-k_theta       = 1.5
-
-try:
-
-    with open('lastcycle.txt') as f: pass
-    inputfile     = open('lastcycle.txt' ,'r')
-    col           = inputfile.readline().split()
-    restart_cycle    =   int(col[0])
-    restart_tau      = float(col[1])
-    restart_type     =       col[2]
-    rcutnext_initial = float(col[3])
-    restartfile = '%s_%d.xyz' % (restart_type,restart_cycle)
+#import gc
 
 
-except IOError as e:
+# simulation parameters (nvt = False is nve)
+rc = pow(2.0, 1.0/6.0)
+skin = 0.3
+ifVisc = True
+dpd = False
+ifbond = True
+skipPPA=False
+skipProf=True
+skipOri=True
+FLAG_MD=not (skipProf and skipOri)
+shear_rate = 0.01
+timestep = 0.002
 
-    restart_type     = 'warmup'
-    restart_cycle    = 0
-    rcutnext_initial = 1.1
-    restart_tau      = 0
-    restartfile   = 'prepack_100.xyz'
-
-restart_types   = ['warmup','relax','equil']
-
-if not restart_type in restart_types:
-    print("invalid restart_type - restart_type must be in ", restart_types)
-    sys.exit()
-
-# ==================================================================================================
-# Setting up initial system parameters
-# ==================================================================================================
-
-density            = 0.849
-bondlength         = 0.97
-monomers_per_chain = 50
-num_chains         = 15*monomers_per_chain
+# set parameters for simulations
+seed               = 654321  # seed for random
+density            = 0.84
+bondlen            = 0.97
+monomers_per_chain = 50      # the number of monomers per a chain
+num_chains         = 15*monomers_per_chain     # the number of chains
 nc_print = max(100,3*monomers_per_chain) #num_chains
+temperature        = 1.0     # set temperature
 
-sigma              = 1.0
-epsilon            = 1.0
-temperature        = 1.0
+# number of prod loops
+prod_nloops       = 20000 #200
+# number of integration steps performed in each production loop
+prod_isteps       = 50
+msid_nloops = prod_nloops/4
 
-skin               = 0.3 #1.0
-rc                 = pow(2, 1.0/6.0) * sigma
-
-LJ_capradius_initial  = pow(2, 1.0/6.0) * sigma
-LJ_capradius_final    = 0.80 * sigma
-
-LJ_capnext_high     = pow(2, 1.0/6.0) * sigma
-LJ_capnext_final    = 0.80 * sigma
-LJ_capnext_initial  = rcutnext_initial * sigma
-
-VMD     = False
-sock    = None
-restart = False
-time_max = 60*60*24
-
-# ==================================================================================================
-# Defining simulation parameters
-# ==================================================================================================
-
-warmup_cycles        = 100
-warmup_ramp          = 85
-warmup_change_stage  = 70
-warmup_steps_stage_1 = 50000
-warmup_steps_stage_2 = 100000
-warmup_timestep      = 0.0001
-warmup_gamma         = 1.0
-msid_bondrange       = 40
-
-relax_cycles         = 1
-relax_steps          = 100000
-relax_timestep       = 0.001
-relax_gamma          = 0.5
-
-equil_cycles         = 10
-equil_steps          = 200000
-equil_timestep       = 0.005
-equil_gamma          = 0.5
-
-warmup_start_time  = 0
-warmup_end_time    = 0
-relax_start_time   = 0
-relax_end_time     = 0
-equil_start_time   = 0
-equil_end_time     = 0
-
-# ==================================================================================================
-# Setting up the simulation box
-# ==================================================================================================
+######################################################################
+### IT SHOULD BE UNNECESSARY TO MAKE MODIFICATIONS BELOW THIS LINE ###
+######################################################################
 sys.stdout.write('Setting up simulation ...\n')
 
-num_particles        = num_chains * monomers_per_chain
+num_particles = num_chains*monomers_per_chain
 Lz=Ly=3.2*math.sqrt(monomers_per_chain)
 Lx=num_particles/density/Lz/Ly
-size                = (Lx, Ly, Lz)
+size = (Lx, Ly, Lz)
 
 # Create random seed
 tseed = int( time.time() * 1000.0 )
@@ -124,588 +91,575 @@ system.rng = espressopp.esutil.RNG()
 system.rng.seed(irand)
 system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
 
-system.skin        = skin
+system.skin = skin
 comm = MPI.COMM_WORLD
 if comm.size>4 and comm.size%4 ==0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
   nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
+#nodeGrid = espressopp.tools.decomp.nodeGrid(n=comm.size,rc=rc,skin=skin)
 cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
-print("NodeGRID: ",nodeGrid)
-print("CellGRID: ",cellGrid)
-
-# ==================================================================================================
-# Read configuration from file
-# ==================================================================================================
-#print("RST_FILE: ",restartfile,restart_type)
-#sys.exit(0)
-file = open(restartfile, 'r')
+#file = open("equil_20.xyz", 'r')
+file = open("equil_20.f.xyz", 'r')
 number_of_particles_in_file  = int(file.readline())
 box_volume                   = file.readline().split()
-print("BOX: ",box_volume,size)
+
 if num_chains * monomers_per_chain != number_of_particles_in_file:
-    print("ERROR: wrong number of particles in restart file")
-    file.close()
-    sys.exit()
+  print("ERROR: wrong number of particles in restart file")
+  file.close()
+  sys.exit()
 
-FENE_pair_bonds            = espressopp.FixedPairList(system.storage)
-Cosine_angle_bonds         = espressopp.FixedTripleList(system.storage)
+print("NCPUs         = ", comm.size)
+print("nodeGrid      = ", nodeGrid)
+print("cellGrid      = ", cellGrid)
+print("Npart         = ", num_particles)
+print("BoxL          = ", size)
+print("RandomSeed    = ", irand)
 
-next_nearest_neighbors = []
-nearest_neighbors      = []
-mass     = 1.0
+# add particles to the system and then decompose
+# do this in chunks of 1000 particles to speed it up
 props    = ['id', 'type', 'mass', 'pos', 'v']
 vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
-particle_id  = 1
-p_incr = 0
-pid = 1
-bonds=[]
-angles=[]
+bondlist = espressopp.FixedPairList(system.storage)
+anglelist = espressopp.FixedTripleList(system.storage)
+pid      = 1
+mass     = 1.0
 
+#bonds = []
+#angles = []
 for i in range(num_chains):
   polymer_chain       = []
-
-  startpos = system.bc.getRandomPos()
-  part_pos, bonds, angles = espressopp.tools.topology.polymerRW(pid, startpos, monomers_per_chain, 0.97, return_angles=True, rng=None)#system.rng)
-  part_type = 0
-  part_vel = vel_zero
-  pid+=monomers_per_chain
+  bonds = []
+  angles = []
   
   for k in range(monomers_per_chain):
     col     = file.readline().split()
-    part_id   = int(col[0])
-    if part_id == 0:
-      p_incr = 1
 
     if (len(col) == 8 or len(col) == 5):
       part_type = int(col[1])
-      part_pos[k][0]  = float(col[2])
-      part_pos[k][1]  = float(col[3])
-      part_pos[k][2]  = float(col[4])
-      part_vel[0]     = float(col[5])
-      part_vel[1]     = float(col[6])
-      part_vel[2]     = float(col[7])
+      part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
+      part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
 	
     elif (len(col) == 7 or len(col) == 4):
       part_type = 0
-      part_pos[k][0]  = float(col[1])
-      part_pos[k][1]  = float(col[2])
-      part_pos[k][2]  = float(col[3])
-      part_vel[0]     = float(col[4])
-      part_vel[1]     = float(col[5])
-      part_vel[2]     = float(col[6])
+      part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
+      part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
-    #print(part_pos)
-    #print(part_vel)
-    particle   = [part_id+p_incr, part_type, mass, part_pos[k], part_vel]
+    #if k==0:
+    #  pos_prev=part_pos
+    #else:
+    #  l=part_pos-pos_prev
+    #  if l[0]<-Lx/2.0:
+    #    part_pos[0]+=Lx
+    #  elif l[0]>Lx/2.0:
+    #    part_pos[0]-=Lx
+    #  if l[1]<-Ly/2.0:
+    #    part_pos[1]+=Ly
+    #  elif l[1]>Ly/2.0:
+    #    part_pos[1]-=Ly
+    #  if l[2]<-Lz/2.0:
+    #    part_pos[2]+=Lz
+    #  elif l[2]>Lz/2.0:
+    #    part_pos[2]-=Lz
+    #  pos_prev=part_pos
+    
+    particle   = [pid+k, part_type, mass, part_pos, part_vel]
     polymer_chain.append(particle)
-    if k<5:
-      print("ID %d - INFO: "%(part_id+p_incr),particle,type(particle[3][0]),type(particle[4][0]))
-    #print(type(part_pos))
-    #print(type(part_vel))
+    
+    #if i==0:
+    #  print(particle)
+    if k < monomers_per_chain-1:
+      bonds.append((pid+k,pid+k+1))
+	
+    if k < monomers_per_chain-2:
+      angles.append((pid+k, pid+k+1, pid+k+2))
+    
+  #print(len(col),angles[0])
 
-  #print("BOND: ",len(bonds),type(bonds[0]),type(bonds[0][1]))
-  #print(bonds)
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
-  #print(type(angles),type(angles[1]))
-  #print(polymer_chain)
-  FENE_pair_bonds.addBonds(bonds)
-  #Cosine_angle_bonds.addTriples(angles)
+  bondlist.addBonds(bonds)
+  anglelist.addTriples(angles)
   
-  if i>1:
-    sys.exit(0)
-  particle_id += monomers_per_chain
+  pid += monomers_per_chain
 
 file.close()
-#FENE_pair_bonds.addBonds(bonds)
-#Cosine_angle_bonds.addTriples(angles)
-
 system.storage.decompose()
-print("QUIT: ",warmup_start_time,restart_type)
+del bonds
+del angles
 sys.exit(0)
-# ==================================================================================================
-# Define non bonded pair, bonded pair and bonded angular interaction lists
-# ==================================================================================================
 
-WCA_verlet_list            = espressopp.VerletList(system, cutoff = rc)
-WCA_verlet_list_warmup     = espressopp.VerletList(system, cutoff = rc)
+# Lennard-Jones with Verlet list
+vl = espressopp.VerletList(system, cutoff = rc)
+potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+interLJ = espressopp.interaction.VerletListLennardJones(vl)
+interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
+system.addInteraction(interLJ)
 
-WCA_next_nearest_neighbors = espressopp.FixedPairList(system.storage)
-WCA_nearest_neighbors      = espressopp.FixedPairList(system.storage)
+if (ifbond):
+  print("Num_BondList  = ", bondlist.size())
+  #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
+  #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
+  #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
+  #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
+  potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
+  interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
+  system.addInteraction(interFENE)
+# Cosine with FixedTriple list
+  potCosine = espressopp.interaction.Cosine(K=1.5, theta0=0.0)
+  interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
+  #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
+  system.addInteraction(interCosine)
 
-for l in range(len(angles)):
-    next_nearest_neighbors.append((angles[l][0], angles[l][2]))
-for q in range(len(bonds)):
-    nearest_neighbors.append((bonds[q][0],bonds[q][1]))
 
-WCA_verlet_list_warmup.exclude(next_nearest_neighbors)
-WCA_verlet_list_warmup.exclude(nearest_neighbors)
+# integrator
+integrator = espressopp.integrator.VelocityVerlet(system)
+integrator.dt = timestep
 
-WCA_next_nearest_neighbors.addBonds(next_nearest_neighbors)
-WCA_nearest_neighbors.addBonds(nearest_neighbors)
-
-# ==================================================================================================
-# Define interactions
-# ==================================================================================================
-
-# the capped WCA interaction uses the verlet list which excludes the nearest and next-nearest neighbors (for the warm-up)
-WCA_capped_potential    = espressopp.interaction.LennardJonesCapped(sigma, epsilon, cutoff = rc, caprad = LJ_capradius_initial)
-WCA_capped_interaction  = espressopp.interaction.VerletListLennardJonesCapped(WCA_verlet_list_warmup)
-WCA_capped_interaction.setPotential(type1 = 0,type2 = 0,potential = WCA_capped_potential)
-
-# the capped WCA interaction for next-nearest neighbors (for the warmup)
-WCA_capped_next_potential = espressopp.interaction.LennardJonesCapped(epsilon, sigma, cutoff=rc, caprad = LJ_capnext_initial)
-WCA_capped_next_interaction = espressopp.interaction.FixedPairListLennardJonesCapped(system, WCA_next_nearest_neighbors, potential = WCA_capped_next_potential)
-
-# we also need to define the full excluded volume interaction for nearest neighbors (for the warmup)
-WCA_full_nearest_interaction = espressopp.interaction.FixedPairListLennardJones(system,
-                                                                         WCA_nearest_neighbors,
-                                                                         potential = espressopp.interaction.LennardJones(epsilon, sigma, cutoff=rc))
-
-# the WCA interaction full excluded volume (for relaxation and equilibration)
-WCA_interaction         = espressopp.interaction.VerletListLennardJones(WCA_verlet_list)
-WCA_potential           = WCA_interaction.setPotential(type1     = 0,
-                                                       type2     = 0,
-                                                       potential = espressopp.interaction.LennardJones(epsilon, sigma, cutoff = rc))
-
-# define FENE bond interaction
-FENE_interaction        = espressopp.interaction.FixedPairListFENE(system, FENE_pair_bonds, potential=espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5))
-
-# define Cosine angular interaction
-Cosine_interaction      = espressopp.interaction.FixedTripleListCosine(system, Cosine_angle_bonds, potential=espressopp.interaction.Cosine(K=k_theta, theta0=0.0))
-
-# ==================================================================================================
-# Setup Velocity Verlet integrator with Langevin thermostat
-# ==================================================================================================
-
-langevin = espressopp.integrator.LangevinThermostat(system)
-langevin.gamma        = warmup_gamma
-langevin.temperature  = temperature
-integrator            = espressopp.integrator.VelocityVerlet(system)
-integrator.addExtension(langevin)
-
-# ==================================================================================================
-# Print system and simulation information
-# ==================================================================================================
-
-output = open('info_%s.txt' % sys.argv[0][:-3] ,'a')
-output.write(time.strftime('%a, %d %b %Y %H:%M:%S'))
-output.write('\n\n%s\n\n'                            % espressopp.Version().info())
-output.write('random seed           = %d \n'         % irand)
-output.write('number of CPUs        = %d \n'         % espressopp.MPI.COMM_WORLD.size)
-output.write('number of particles   = %d \n'         % num_particles)
-output.write('number of chains      = %d \n'         % num_chains)
-output.write('chain length          = %d \n'         % monomers_per_chain)
-output.write('simulation box        = (%f,%f,%f) \n' % (size[0],size[1],size[2]))
-output.write('density               = %f \n'         % density)
-output.write('rc                    = %.2f \n'       % rc)
-output.write('skin                  = %.2f \n'       % system.skin)
-output.write('langevin temperature  = %.2f \n'       % langevin.temperature)
-output.write('langevin warmup gamma = %.2f \n'       % warmup_gamma)
-output.write('langevin relax gamma  = %.2f \n'       % relax_gamma)
-output.write('langevin equil gamma  = %.2f \n'       % equil_gamma)
-output.write('LJ capradius initial  = %f \n'         % LJ_capradius_initial)
-output.write('LJ capradius final    = %f \n'         % LJ_capradius_final)
-output.write('LJ capnext initial    = %f \n'         % LJ_capnext_initial)
-output.write('LJ capnext final      = %f \n'         % LJ_capnext_final)
-output.write('LJ capnext high       = %f \n'         % LJ_capnext_high)
-output.write('bondlength            = %.2f \n'       % bondlength)
-output.write('k_theta               = %f \n'         % k_theta)
-output.write('NodeGrid              = (%.1f,%.1f,%.1f) \n' % (nodeGrid[0],nodeGrid[1],nodeGrid[2]))
-output.write('CellGrid              = (%.1f,%.1f,%.1f) \n' % (cellGrid[0],cellGrid[1],cellGrid[2]))
-output.write('warmup cycles         = %d \n'         % warmup_cycles)
-output.write('warmup steps stage 1  = %d \n'         % warmup_steps_stage_1)
-output.write('warmup steps stage 2  = %d \n'         % warmup_steps_stage_2)
-output.write('warmup timestep       = %f \n'         % warmup_timestep)
-output.write('relax cycles          = %d \n'         % relax_cycles)
-output.write('relax steps           = %d \n'         % relax_steps)
-output.write('relax timestep        = %f \n'         % relax_timestep)
-output.write('equil cycles          = %d \n'         % equil_cycles)
-output.write('equil steps           = %d \n'         % equil_steps)
-output.write('equil timestep        = %f \n\n'       % equil_timestep)
-output.close()
-
-# ==================================================================================================
-# Setup analysis
-# ==================================================================================================
-
-temperature    = espressopp.analysis.Temperature(system)
-pressure       = espressopp.analysis.Pressure(system)
-pressureTensor = espressopp.analysis.PressureTensor(system)
-msid           = espressopp.analysis.MeanSquareInternalDist(system,monomers_per_chain)
-
-def analyze_info(step,tau,step_type):
-
-  T      = temperature.compute()
-  P      = pressure.compute()
-  Pij    = pressureTensor.compute()
-  Ek     = (3.0/2.0) * T
-  Etotal = 0.0
-  tot    = '%5d %10d %8.6f %10.6f %10.6f %12.8f' % (step, tau, T, P, Pij[3], Ek)
-  tt     = ''
-
-  for k in range(system.getNumberOfInteractions()):
-    e       = system.getInteraction(k).computeEnergy()/num_particles
-    Etotal += e
-    tot    += ' %12.8f' % e
-    tt     += '      e%d     ' % k
-  tot += ' %12.8f' % Etotal
-  tt  += '    etotal   '
-
-  tot2 = tot + '   %s \n' % ( time.strftime('%H:%M:%S'))  
-  tot += ' %s %12.8f %12.8f\n' % (time.strftime('%H:%M:%S'), WCA_capped_potential.caprad, WCA_capped_next_potential.caprad)
-  tt  += ' time  cap_radius  next_cap_radius\n'
+if (dpd):
+  thermo=espressopp.integrator.DPDThermostat(system, vl, ntotal=num_particles)
+  thermo.gamma=1.0
+  thermo.tgamma=0.0
+  thermo.temperature = temperature
+  integrator.addExtension(thermo)
+else:
+  thermo = espressopp.integrator.LangevinThermostat(system)
+  thermo.gamma = 1.0
+  thermo.temperature = temperature
+  integrator.addExtension(thermo)
   
-  if step == restart_cycle or step == 0:
-       output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-       output.write(' cycle     tau         T          P        Pxy       ekinetic ' + tt)                
-       output.close()
+  
+system.bc          = espressopp.bc.OrthorhombicBC(system.rng, size)
 
-  if step_type == 'warmup':
-       output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-       output.write(tot)
-       output.close()
+# print simulation parameters
+print(' ')
+print('number of particles =', num_particles)
+print('density = %.4f' % (density))
+print('rc =', rc)
+print('dt =', integrator.dt)
+print('skin =', system.skin)
+print('thermostat(DPD) =', dpd)
+print('steps =', prod_nloops*prod_isteps)
+print('NodeGrid = %s' % (nodeGrid))
+print('CellGrid = %s' % (cellGrid))
+print(' ')
 
-  if step_type == 'relax' or step_type == 'equil' :
-       output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-       output.write(tot2)
-       output.close()
+# analysis
+conf = espressopp.analysis.Configurations(system)
+conf.gather()
 
-# ==================================================================================================
-# Warm-up
-# ==================================================================================================
+temperature = espressopp.analysis.Temperature(system)
+pressure = espressopp.analysis.Pressure(system)
+pressureTensor = espressopp.analysis.PressureTensor(system)
 
-if not restart and restart_type == 'warmup':
+fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
-    if (k_theta == 0.0): 
-        msid_initial = open('average_intdist_0.txt','r')
-    elif (k_theta == 0.75): 
-        msid_initial = open('average_intdist_0p75.txt','r')
-    elif (k_theta == 1.0): 
-        msid_initial = open('average_intdist_1.txt','r')
-    elif (k_theta == 1.5): 
-        msid_initial = open('average_intdist_1p5.txt','r')
-    elif (k_theta == 2.0): 
-        msid_initial = open('average_intdist_2.txt','r')
+#espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+#for step in range(50)
+#integrator.run(20)
+#sys.exit(0)
 
-    msid_zero = []
-    for k in range(msid_bondrange):
-            col = msid_initial.readline().split()
-            msid_zero.append(float(col[1]))
-    msid_initial.close()
+#Equilibration
+print("starting equilibration (TEST) ...")
+espressopp.tools.analyse.info(system, integrator)
+for step in range(50):
+  integrator.run(20)
+  espressopp.tools.analyse.info(system, integrator)
+  if (math.isnan(interFENE.computeEnergy())):
+    print("FENE becomes NaN after equilibration")
+    sys.exit(0)
+print("equilibration finished")
+print("NRESORT>", integrator.getNumResorts())
 
-    output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-    output.write('starting warmup ... \n')
-    output.write('\n')
-    output.close()
+#T = temperature.compute()
+#P = pressure.compute()
+#Pij = pressureTensor.compute()
+#Ek = 0.5 * T * (3 * num_particles)
+#Ep = interLJ.computeEnergy()
+#Eb = interFENE.computeEnergy()
+#Ea = interCosine.computeEnergy()
+#Etotal = Ek + Ep + Eb + Ea
+#sys.stdout.write(' step     T          P       Pxy        etotal      ekinetic      epair        ebond       eangle\n')
+#sys.stdout.write(fmt % (0, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
 
-    system.addInteraction(WCA_capped_interaction)
-    system.addInteraction(WCA_capped_next_interaction)
-    system.addInteraction(WCA_full_nearest_interaction)
-    system.addInteraction(FENE_interaction)
-    system.addInteraction(Cosine_interaction)
+########################################################################
+# RUN shear flow MD                                                    #
+########################################################################
 
-    if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
+# cancelling thermostat
+#thermo.disconnect()
+# set all integrator timers to zero again (they were increased during warmup)
+integrator.resetTimers()
+# set integrator time step to zero again
+integrator.step = 0
 
-    if restart_type != 'warmup':
-        i = 0
-        tau = 0
-    else:
-        i = restart_cycle
-        tau = restart_tau
+if (shear_rate>0.0):
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=ifVisc)
+else:
+  integrator2     = espressopp.integrator.VelocityVerlet(system)
+# set the integration step  
+integrator2.dt  = timestep
+integrator2.step = 0
 
-    integrator.dt     = warmup_timestep
-    warmup_steps      = warmup_steps_stage_1
-    warmup_start_time = time.process_time()
-	
-    while not restart and i < warmup_cycles:
+integrator2.addExtension(thermo)
+#fixpositions = espressopp.integrator.FixPositions(system, fixedWall, fixMask)
+#integrator2.addExtension(fixpositions)
 
-        cycle_begin_time = time.time()
+#IMPORTANT
+system.storage.cellAdjust()
 
-        espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system)
+print("starting production ...")
+espressopp.tools.analyse.info(system, integrator2)
+#sock = espressopp.tools.vmd.connect(system)
+filename = "traj.pdb"
+if os.path.exists(filename):
+  os.remove(filename)
+
+#Preparation
+if FLAG_MD:
+  pos = espressopp.analysis.Configurations(system)
+  vel = espressopp.analysis.Velocities(system)
+  bin_size=50
+  mass=1 #here assume all mass=1
+  #integrator2.run(0)
+  pos.capacity=1
+  vel.capacity=1
+
+start_time = time.process_time()
+for step in range(prod_nloops+1):
+  if step > 0:  
+    integrator2.run(prod_isteps)
+    espressopp.tools.analyse.info(system, integrator2)
+    if ifVisc:
+      print("SIGXZ> %d %.6f" % (step*prod_isteps,system.sumP_xz))
+    if (math.isnan(interFENE.computeEnergy())):
+      print("FENE becomes NaN during production")
+      sys.exit(0)
+    #espressopp.tools.pdb.pdbwrite(filename, system, append=True)
+    #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
+  
+  if FLAG_MD:
+    #fetch coordinates and velocities
+    pos.gather()
+    vel.gather()
+    #get no. of the current step
+    currentStep=step*prod_isteps
+    #Init
+    if not skipProf:
+      cnt=[0]*bin_size
+      vx =[0]*bin_size
+      vz =[0]*bin_size
+      sx =[0]*bin_size
+      ty =[0]*bin_size
+      tz =[0]*bin_size
+    mo=[.0,.0,.0,.0]
+    #ori=[[.0,.0,.0]]*num_chains
+    for j in range(1,num_particles+1):
+      #print "IDX>",j
+      # define shear speed of the current particle
+      spdShear=shear_rate*(pos[0][j][2]-Lz/2.0)
+      
+      #momentum
+      mo[0]+=vel[0][j][0]
+      mo[1]+=vel[0][j][1]
+      mo[2]+=vel[0][j][2]
+      mo[3]+=vel[0][j][0]+spdShear
+      
+      #profile
+      if not skipProf:
+        bid=int(pos[0][j][2]/Lz*bin_size)
+        if bid<0:
+          bid=0
+        elif bid>=bin_size:
+          bid=bin_size-1
+        #collect profile info by layers along gradient-dir
+        cnt[bid]+=1;
+        vx[bid]+=vel[0][j][0]
+        vz[bid]+=vel[0][j][2]
+        sx[bid]+=vel[0][j][0]+spdShear
+        ty[bid]+=vel[0][j][1]*vel[0][j][1]*mass/1.0
+        tz[bid]+=vel[0][j][2]*vel[0][j][2]*mass/1.0
+      
+      #collect end-to-end orientation (normailized)
+      if not skipOri:
+        print("Current Orientation is wrong(shearOffset)")
+        sys.exit(0)
+        mono_idx=(j-1)%monomers_per_chain
+        chain_idx=(j-1-mono_idx)/monomers_per_chain
+        if chain_idx<nc_print:
+          if mono_idx==0:
+            ori=Real3D(.0,.0,.0)
+            dim=[0,0,0]
+            ori-=pos[0][j]
+          else:
+            l=pos[0][j]-pos[0][j-1]
+            if l[0]<-Lx/2.0:
+              dim[0]+=1
+            elif l[0]>Lx/2.0:
+              dim[0]-=1
+            if l[1]<-Ly/2.0:
+              dim[1]+=1
+            elif l[1]>Ly/2.0:
+              dim[1]-=1
+            if l[2]<-Lz/2.0:
+              dim[2]+=1
+            elif l[2]>Lz/2.0:
+              dim[2]-=1
+            if mono_idx==monomers_per_chain-1:
+              ori+=pos[0][j]
+              ori+=Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz)
+              ori_abs=ori.abs()
+              print("CHAIN-%0d> %10d %.6f %.6f %.6f" %(chain_idx,currentStep,ori[0]/ori_abs,ori[1]/ori_abs,ori[2]/ori_abs))
+              del ori
+              #gc.collect()
+    
+    #print data
+    print("MOMENTUM> %10d %.6f %.6f %.6f %.6f" %(currentStep,mo[0]/num_particles,mo[1]/num_particles,mo[2]/num_particles,mo[3]/num_particles))
+    if not skipProf:
+      for j in range(bin_size):
+        #print "COUNT>",cnt[j]
+        zb=(j+0.5)/bin_size
+        if cnt[j]>0:
+          print("DISTR> %10d %.3f %.6f" %(currentStep,zb,cnt[j]/num_particles*bin_size))
+          print("VX> %10d %.3f %.6f" %(currentStep,zb,vx[j]/cnt[j]))
+          print("VZ> %10d %.3f %.6f" %(currentStep,zb,vz[j]/cnt[j]))
+          if shear_rate>.0:
+            print("VSHEAR> %10d %.3f %.6f" %(currentStep,zb,sx[j]/cnt[j]/(shear_rate*Lz/2.0)))
+          print("TY> %10d %.3f %.6f" %(currentStep,zb,ty[j]/cnt[j]))
+          print("TZ> %10d %.3f %.6f" %(currentStep,zb,tz[j]/cnt[j]))
         
-        msid.gather()
-        result = msid.compute()
-
-        file = open("intdist_warmup_%d.txt" % i,"w")
-        for c in range(monomers_per_chain-1):
-            line = "%d %f\n" % (c+1,result[c]/(c+1))
-            file.write(line)
-        file.close()
-
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %f %s %12.8f' % (i, tau,'warmup', WCA_capped_next_potential.caprad) )
-        output.close()
-
-        WCA_capped_potential.caprad = LJ_capradius_initial + (LJ_capradius_final-LJ_capradius_initial)*i/(warmup_cycles-1)
-        WCA_capped_interaction.setPotential(type1 = 0,type2 = 0,potential = WCA_capped_potential)
-
-        if (i > warmup_ramp):
-
-            LJ_capnext = WCA_capped_next_potential.caprad - 0.01
-
-        else:
-
-            msid_cycle = []
-            msid_dif = 0.0
-            msid_read = open('intdist_warmup_%d.txt' % i ,'r')
-            for k in range(msid_bondrange):
-                col = msid_read.readline().split()
-                msid_cycle.append(float(col[1]))
-                if (k>10):
-                    msid_dif += msid_zero[k] - msid_cycle[k]
-            msid_read.close()
-		
-            if   (msid_dif>0.0001):
-                LJ_capnext = WCA_capped_next_potential.caprad - 0.01
-            elif (msid_dif<-0.0001):
-                LJ_capnext = WCA_capped_next_potential.caprad + 0.01
-            else:
-                LJ_capnext = WCA_capped_next_potential.caprad
-
-        if (LJ_capnext < LJ_capnext_final):  LJ_capnext = LJ_capnext_final
-        if (LJ_capnext > LJ_capnext_high):   LJ_capnext = LJ_capnext_high
-
-        WCA_capped_next_potential.caprad = LJ_capnext
-        WCA_capped_next_interaction.setPotential(potential = WCA_capped_next_potential)
-
-        analyze_info(i,tau, 'warmup')
-
-        if (i > warmup_change_stage): warmup_steps = warmup_steps_stage_2
-
-        integrator.run(warmup_steps)
-        tau += warmup_steps * warmup_timestep
-
-        if VMD == True:
-            espressopp.tools.vmd.imd_positions(system,sock,folded=False)
-
-        i += 1
-
-        current_time = time.time()
-        cycle_time = current_time - cycle_begin_time
-        if (i == warmup_change_stage): cycle_time = (warmup_steps_stage_2/warmup_steps_stage_1)*cycle_time
-        remaining_time = time_max - (current_time - start_time)
-        if ((remaining_time/cycle_time) < 1): restart = True
-        else: restart = False
-        print("warmup i: ", i , "restart: ", restart)
-
-    analyze_info(i,tau, 'warmup')
-    espressopp.tools.fastwritexyz('warmup_%d.xyz' % i, system)
-
-    msid.gather()
-    result = msid.compute()
-
-    file = open("intdist_warmup_%d.txt" % i,"w")
-    for c in range(monomers_per_chain-1):
-       line = "%d %f\n" % (c+1,result[c]/(c+1))
-       file.write(line)
-    file.close()
-
-    if (i == warmup_cycles):
-
-        os.system('cp warmup_%d.xyz relax_0.xyz' % i)
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %d %s %f' % (0, 0,'relax',0.0) )
-        output.close()
-        restart_type = 'relax'
-        restart_cycle = 0
-        restart_tau = 0 
-
-    else:
-
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %f %s %12.8f' % (i, tau,'warmup', WCA_capped_next_potential.caprad) )
-        output.close()
-
-    system.removeInteraction(4)
-    system.removeInteraction(3)
-    system.removeInteraction(2)
-    system.removeInteraction(1)
-    system.removeInteraction(0)
-
-    WCA_verlet_list_warmup.disconnect()
-    warmup_end_time = time.process_time()
-    espressopp.tools.analyse.final_info(system, integrator, WCA_verlet_list_warmup, warmup_start_time, warmup_end_time)
-
-# ==================================================================================================
-# Relaxation
-# ==================================================================================================
-
-if not restart and restart_type == 'relax':
-
-    output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-    output.write('starting relaxation ...\n')
-    output.write('\n')
-    output.close()
-
-    langevin.gamma = relax_gamma
-
-    system.addInteraction(WCA_interaction)
-    system.addInteraction(FENE_interaction)
-    system.addInteraction(Cosine_interaction)
-
-    if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
-
-    if restart_type != 'relax':
-        i   = 0
-        tau = 0
-    else:
-        i = restart_cycle
-        tau = restart_tau
-
-    integrator.dt = relax_timestep
-    relax_start_time = time.process_time()
-
-    while not restart and i < relax_cycles:
-
-        cycle_begin_time = time.time()
-
-        analyze_info(i,tau, 'relax')
-        espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system)
-
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %d %s %f' % (i, tau,'relax',0.0) )
-        output.close()
-
-        integrator.run(relax_steps)
-        tau += relax_steps * relax_timestep
-
-        if VMD == True:
-            espressopp.tools.vmd.imd_positions(system,sock,folded=False)
-
-        i += 1
-
-        current_time = time.time()
-        cycle_time = current_time - cycle_begin_time
-        remaining_time = time_max - (current_time - start_time)
-        if ((remaining_time/cycle_time) < 1): restart = True
-        else: restart = False
-        print("relax i: ", i , "restart: ", restart)
-        
-    analyze_info(i,tau, 'relax')
-    espressopp.tools.fastwritexyz('relax_%d.xyz' % i, system)
-
-    if (i == relax_cycles):
-
-        os.system('cp relax_%d.xyz equil_0.xyz' % i)
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %d %s %f' % (0, 0,'equil',0.0) )
-        output.close()
-        restart_type = 'equil'
-        restart_cycle = 0
-        restart_tau = 0        
-
-    else:
-
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %f %s %12.8f' % (i, tau,'relax', 0.0) )
-        output.close()
-
-    system.removeInteraction(2)
-    system.removeInteraction(1)
-    system.removeInteraction(0)
-
-    relax_end_time   = time.process_time()
-    espressopp.tools.analyse.final_info(system, integrator, WCA_verlet_list , relax_start_time, relax_end_time)
-
-# ==================================================================================================
-# Equilibration
-# ==================================================================================================
-
-if not restart and restart_type == 'equil':
-
-    output = open('info_%s.txt' % sys.argv[0][:-3] ,'a') 
-    output.write('starting equilibration ...\n')
-    output.write('\n')
-    output.close()
-
-    langevin.gamma = equil_gamma
-
-    system.addInteraction(WCA_interaction)
-    system.addInteraction(FENE_interaction)
-    system.addInteraction(Cosine_interaction)
-
-    if (VMD == True and sock == None):
-        sock = espressopp.tools.vmd.connect(system, molsize = monomers_per_chain)
-
-    if restart_type != 'equil':
-        i = 0
-        tau = 0 
-    else:
-        i = restart_cycle
-        tau = restart_tau
-
-    integrator.dt = equil_timestep
-    equil_start_time = time.process_time()
-
-    while not restart and i < equil_cycles:
-
-        cycle_begin_time = time.time()
-
-        analyze_info(i,tau, 'equil')
-        espressopp.tools.fastwritexyz('equil_%d.xyz' % i, system)
-
-        msid.gather()
-        result = msid.compute()
-
-        file = open("intdist_equil_%d.txt" % i,"w")
-        for c in range(monomers_per_chain-1):
-            line = "%d %f\n" % (c+1,result[c]/(c+1))
-            file.write(line)
-        file.close()
-
-        output = open('lastcycle.txt' ,'w')
-        output.write('%d %d %s %f' % (i, tau,'equil',0.0) )
-        output.close()
-
-        integrator.run(equil_steps)
-        tau += equil_steps * equil_timestep
-
-        if VMD == True:
-            espressopp.tools.vmd.imd_positions(system,sock,folded=False)
-
-        i += 1
-
-        current_time = time.time()
-        cycle_time = current_time - cycle_begin_time
-        remaining_time = time_max - (current_time - start_time)
-        if ((remaining_time/cycle_time) < 1): restart = True
-        else: restart = False
-        print("equil i: ", i , "restart: ", restart)
-
-    analyze_info(i,tau, 'equil')
-    espressopp.tools.fastwritexyz('equil_%d.xyz' % i, system)
-
-    msid.gather()
-    result = msid.compute()
-
-    file = open("intdist_equil_%d.txt" % i,"w")
-    for c in range(monomers_per_chain-1):
-       line = "%d %f\n" % (c+1,result[c]/(c+1))
-       file.write(line)
-    file.close()
-
-    output = open('lastcycle.txt' ,'w')
-    output.write('%d %d %s %f' % (i, tau,'equil',0.0) )
-    output.close()
-
-    system.removeInteraction(2)
-    system.removeInteraction(1)
-    system.removeInteraction(0)
-
-    equil_end_time = time.process_time()
-    espressopp.tools.analyse.final_info(system, integrator, WCA_verlet_list , equil_start_time, equil_end_time)
-
-# ==================================================================================================
-# Termination
-# ==================================================================================================
-
-output = open('last.txt' ,'w')
-output.write('%d %f %s' % (i, tau, restart_type) )
-output.close()
-
+    #release memory
+      del cnt
+      del vx 
+      del vz 
+      del sx 
+      del ty 
+      del tz 
+    del mo 
+    #gc.collect()
+    #pos.clear()
+    #vel.clear()
+
+end_time = time.process_time()
+print("production finished")
+
+if (ifbond):
+  T = temperature.compute()
+  P = pressure.compute()
+  Pij = pressureTensor.compute()
+  Ek = 0.5 * T * (3 * num_particles)
+  Ep = interLJ.computeEnergy()
+  Eb = interFENE.computeEnergy()
+  #Ea = interCosine.computeEnergy()
+  Etotal = Ek + Ep + Eb #+ Ea
+  #sys.stdout.write(fmt % (prod_nloops*prod_isteps, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
+  sys.stdout.write(fmt % (prod_nloops*prod_isteps, T, P, Pij[3], Etotal, Ek, Ep, Eb, 0.0))
+  sys.stdout.write('\n')
+
+# print timings and neighbor list information
+timers.show(integrator2.getTimers(), precision=3)
+sys.stdout.write('Total # of neighbors = %d\n' % vl.totalSize())
+sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl.totalSize() / float(num_particles)))
+sys.stdout.write('Neighbor list builds = %d\n' % vl.builds)
+sys.stdout.write('Integration steps = %d\n' % integrator2.step)
+sys.stdout.write('CPUs = %i CPU time per CPU = %.1f\n' % (comm.size,end_time - start_time))
+
+# set all integrator2 timers to zero again 
+integrator2.resetTimers()
+# set integrator time step to zero again
+integrator2.step = 0
+
+########################################################################
+# RUN PPA                                                              #
+########################################################################
+if not skipPPA:
+  #if os.path.exists("FLAG_V"):
+  #  os.remove("FLAG_V")
+  
+  system.removeInteraction(1) 
+  system.removeInteraction(0) 
+  thermo.disconnect()
+  # the equilibration uses a different interaction cutoff therefore the current
+  # verlet list is not needed any more and would waste only CPU time
+  
+  exlist=[]
+  for nc in range(num_chains):
+    for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
+      for j in range(i+1,(nc+1)*monomers_per_chain+1):
+        exlist.append((i,j))
+  vl.exclude(exlist)
+  potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+  interLJ = espressopp.interaction.VerletListLennardJones(vl)
+  interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
+  system.addInteraction(interLJ)
+  
+  if (ifbond):
+    #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
+    #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
+    #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.49)
+    #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
+    potFENE = espressopp.interaction.FENE(K=100.0, r0=0.0, rMax=1.5)
+    interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
+    system.addInteraction(interFENE)
+  ## Cosine with FixedTriple list
+  #   potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
+  #   interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
+  #   #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
+  #   system.addInteraction(interCosine)
+  
+  # fix x,y and z coord axis
+  print("Fix head-end of all polymer chains")
+  fixMask = espressopp.Int3D(1,1,1)
+  # create a particel group that will contain the fixed particles
+  fixedWall  = espressopp.ParticleGroup(system.storage)
+  
+  for nc in range(num_chains):
+    fixedWall.add(nc*monomers_per_chain+1)
+    fixedWall.add((nc+1)*monomers_per_chain)
+    
+  system.storage.decompose()
+  fixpositions = espressopp.integrator.FixPositions(system, fixedWall, fixMask)
+  integrator.addExtension(fixpositions)
+  espressopp.tools.analyse.info(system, integrator)
+  
+  zero_vel = espressopp.Real3D(0.)
+  for i in range(1,num_particles+1):
+    #i=0
+    system.storage.modifyParticle(i, 'v', zero_vel)
+    #v = system.storage.getParticle(i).v
+    #print "V2: ",v
+    #sys.exit(0)
+  
+  thermostat = espressopp.integrator.LangevinThermostat(system)
+  thermostat.gamma = 20.0
+  thermostat.temperature = 0.001
+  integrator.addExtension(thermostat)
+  system.storage.decompose()
+  
+  file2="traj_ppa.pdb"
+  for step in range(20):
+    integrator.run(50)
+    espressopp.tools.analyse.info(system, integrator)
+    if (math.isnan(interFENE.computeEnergy())):
+      print("FENE becomes NaN during production")
+      sys.exit(0)
+    #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
+    #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
+    
+  thermostat.gamma=0.5
+  for step in range(200):
+    integrator.run(100)
+    espressopp.tools.analyse.info(system, integrator)
+    if (math.isnan(interFENE.computeEnergy())):
+      print("FENE becomes NaN during production")
+      sys.exit(0)
+    espressopp.tools.pdb.pdbwrite(file2, system, append=True)
+    #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
+  
+  # post-analysis
+  conf = espressopp.analysis.Configurations(system)
+  conf.gather()
+  r2_sum=0
+  cnt=0
+  clen=[]
+  diam=[]
+  rlen=[]
+  for i in range(num_chains):
+    dim=[0,0,0]
+    lsum=0
+    #coor=[]
+    jj=monomers_per_chain*i+1
+    #coor.append(conf[0][jj])
+    #coor.append(conf[0][jj])
+  
+    for j in range(1,monomers_per_chain):
+      jj=monomers_per_chain*i+j
+      l=conf[0][jj+1]-conf[0][jj]
+      if l[2]<-Lz/2.0:
+        dim[2]+=1
+        l[2]+=Lz
+        l[0]+=system.shearOffset
+      elif l[2]>Lz/2.0:
+        dim[2]-=1
+        l[2]-=Lz
+        l[0]-=system.shearOffset
+      if l[1]<-Ly/2.0:
+        dim[1]+=1
+        l[1]+=Ly
+      elif l[1]>Ly/2.0:
+        dim[1]-=1
+        l[1]-=Ly
+      if l[0]<-Lx/2.0:
+        while l[0]<-Lx/2.0:
+          dim[0]+=1
+          l[0]+=Lx
+      elif l[0]>Lx/2.0:
+        while l[0]>Lx/2.0:
+          dim[0]-=1
+          l[0]-=Lx
+      lsum+=l.abs()
+      #coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
+      #coor[0][0]+=coor[j+1][0]
+      #coor[0][1]+=coor[j+1][1]
+      #coor[0][2]+=coor[j+1][2]
+    clen.append(lsum)
+    
+    #coor[0][0]/=monomers_per_chain
+    #coor[0][1]/=monomers_per_chain
+    #coor[0][2]/=monomers_per_chain
+    ##print "COOR> ",i,coor
+    
+    #maxd=0
+    #for j in range(1,monomers_per_chain):
+    #  dtmp=coor[j]-coor[0]
+    #  if (dtmp.abs()>maxd):
+    #    maxd=dtmp.abs()
+    #diam.append(maxd*2.0)
+    
+    rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
+    rtmp[2]+=float(dim[2])*Lz
+    rtmp[0]+=float(dim[2])*system.shearOffset
+    rtmp[1]+=float(dim[1])*Ly
+    rtmp[0]+=float(dim[0])*Lx
+    r2_sum+=rtmp.abs()**2
+    rlen.append(rtmp.abs())
+    
+  
+  r2_msq=r2_sum/num_chains
+  klen=[]
+  elen=[]
+  znum=[]
+  #tbd=[]
+  for i in range(num_chains):
+    c2=clen[i]**2
+    r2=rlen[i]**2
+    klen.append(r2/clen[i])
+    elen.append(r2/c2*float(monomers_per_chain-1))
+    #tbd.append(math.sqrt(elen[i])*clen[i]/(monomers_per_chain-1))
+    znum.append(float(monomers_per_chain)/float(monomers_per_chain-1)*(c2/r2-1))
+    
+  print("---------------")
+  print("R_SQUARE> ",r2_msq)
+  print("R_MEAN> ",math.sqrt(r2_msq))
+  print("---------------")
+  print("CONTOUR> ",clen[0:nc_print])
+  print("CT_AVG> ",sum(clen)/float(len(clen)))
+  print("---------------")
+  print("KUHN> ",klen[0:nc_print])
+  print("APP_AVG> ",sum(klen)/float(len(klen)))
+  print("---------------")
+  bpp=[x/(monomers_per_chain-1) for x in clen]
+  print("BPP> ",bpp[0:nc_print])
+  print("BPP_AVG> ",sum(bpp)/float(len(bpp)))
+  print("---------------")
+ #print("TUBED> ",tbd)
+ #print("DIAMETER> ",diam)
+ #print("---------------")
+  print("NENTANG> ",elen[0:nc_print])
+  print("N_AVG> ",sum(elen)/float(len(elen)))
+  print("---------------")
+  print("ZENTANG> ",znum[0:nc_print])
+  print("Z_AVG> ",sum(znum)/float(len(znum)))
+  print("---------------")
