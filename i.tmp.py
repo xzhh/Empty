@@ -58,13 +58,7 @@ def vec_angle(v1, v2):
 # simulation parameters (nvt = False is nve)
 rc = pow(2.0, 1.0/6.0)
 skin = 0.3
-ifVisc = True
-dpd = True
-ifbond = True
-skipPPA=False
-skipProf=True
-skipOri=True
-FLAG_MD=not (skipProf and skipOri)
+dpd = False
 shear_rate = 0.1
 timestep = 0.002
 
@@ -77,11 +71,16 @@ num_chains         = 15*monomers_per_chain     # the number of chains
 nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
 
+# number of equil loops
+equi_nloops = 100
+equi_isteps = 50
 # number of prod loops
-prod_nloops       = 50000 #200
+prod_nloops       = 1
 # number of integration steps performed in each production loop
-prod_isteps       = 50
-msid_nloops = prod_nloops/4
+prod_isteps       = 25000
+
+# NReplication
+NumDup = 1
 
 ######################################################################
 ### IT SHOULD BE UNNECESSARY TO MAKE MODIFICATIONS BELOW THIS LINE ###
@@ -89,9 +88,9 @@ msid_nloops = prod_nloops/4
 sys.stdout.write('Setting up simulation ...\n')
 
 num_particles = num_chains*monomers_per_chain
+num_one_copy = num_particles
 Lz=Ly=3.2*math.sqrt(monomers_per_chain)
 Lx=num_particles/density/Lz/Ly
-size = (Lx, Ly, Lz)
 
 # Create random seed
 tseed = int( time.time() * 1000.0 )
@@ -101,21 +100,6 @@ random.seed( ((tseed & 0xff000000) >> 24) +
              ((tseed & 0x000000ff) << 24)   )
 irand=random.randint(1,99999)
 
-system = espressopp.System()
-system.rng = espressopp.esutil.RNG()
-system.rng.seed(irand)
-system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
-
-system.skin = skin
-comm = MPI.COMM_WORLD
-if comm.size>4 and comm.size%4 ==0:
-  nodeGrid = espressopp.Int3D(comm.size/4,2,2)
-else:
-  nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
-#nodeGrid = espressopp.tools.decomp.nodeGrid(n=comm.size,rc=rc,skin=skin)
-cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
-system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
-
 file = open("equil_20.xyz", 'r')
 number_of_particles_in_file  = int(file.readline())
 box_volume                   = file.readline().split()
@@ -124,6 +108,67 @@ if num_chains * monomers_per_chain != number_of_particles_in_file:
   print("ERROR: wrong number of particles in restart file")
   file.close()
   sys.exit()
+
+bonds = []
+angles = []
+x = []
+y = []
+z = []
+vx = []
+vy = []
+vz = []
+ptype = []
+pid = 1
+for i in range(num_chains):
+  #bonds = []
+  #angles = []
+  
+  for k in range(monomers_per_chain):
+    col     = file.readline().split()
+
+    if (len(col) == 8 or len(col) == 5):
+      ptype.append(int(col[1]))
+      x.append(float(col[2]))
+      y.append(float(col[3]))
+      z.append(float(col[4]))
+      vx.append(float(col[5]))
+      vy.append(float(col[6]))
+      vz.append(float(col[7]))
+      
+	
+    elif (len(col) == 7 or len(col) == 4):
+      ptype.append(0)
+      x.append(float(col[1]))
+      y.append(float(col[2]))
+      z.append(float(col[3]))
+      vx.append(float(col[4]))
+      vy.append(float(col[5]))
+      vz.append(float(col[6]))
+    
+    if k < monomers_per_chain-1:
+      bonds.append((pid+k,pid+k+1))
+	
+    if k < monomers_per_chain-2:
+      angles.append((pid+k, pid+k+1, pid+k+2))
+  pid += monomers_per_chain
+
+file.close()
+
+replicate   = (NumDup*3,NumDup*3,NumDup*1)
+rp = espressopp.tools.ReplicateParallel()
+num_particles, Lx, Ly, Lz = rp.replicate(bonds, angles, x, y, z, Lx, Ly, Lz, *replicate)
+
+size = (Lx, Ly, Lz)
+system = espressopp.System()
+system.rng = espressopp.esutil.RNG()
+system.rng.seed(irand)
+system.bc = espressopp.bc.OrthorhombicBC(system.rng, size)
+
+system.skin = skin
+comm = MPI.COMM_WORLD
+nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
+cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
+system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
 print("NCPUs         = ", comm.size)
 print("nodeGrid      = ", nodeGrid)
@@ -136,55 +181,20 @@ print("RandomSeed    = ", irand)
 # do this in chunks of 1000 particles to speed it up
 props    = ['id', 'type', 'mass', 'pos', 'v']
 vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
-bondlist = espressopp.FixedPairList(system.storage)
-anglelist = espressopp.FixedTripleList(system.storage)
 pid      = 1
 mass     = 1.0
-
-#bonds = []
-#angles = []
-for i in range(num_chains):
-  polymer_chain       = []
-  bonds = []
-  angles = []
-  
-  for k in range(monomers_per_chain):
-    col     = file.readline().split()
-
-    if (len(col) == 8 or len(col) == 5):
-      part_type = int(col[1])
-      part_pos  = espressopp.Real3D(float(col[2]), float(col[3]), float(col[4]))
-      part_vel  = espressopp.Real3D(float(col[5]), float(col[6]), float(col[7]))
-	
-    elif (len(col) == 7 or len(col) == 4):
-      part_type = 0
-      part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
-      part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
-
-    particle   = [pid+k, part_type, mass, part_pos, part_vel]
-    polymer_chain.append(particle)
-    
-    #if i==0:
-    #  print(particle)
-    if k < monomers_per_chain-1:
-      bonds.append((pid+k,pid+k+1))
-	
-    if k < monomers_per_chain-2:
-      angles.append((pid+k, pid+k+1, pid+k+2))
-    
-  #print(len(col),angles[0])
-
-  system.storage.addParticles(polymer_chain, *props)
-  system.storage.decompose()
-  bondlist.addBonds(bonds)
-  anglelist.addTriples(angles)
-  
-  pid += monomers_per_chain
-
-file.close()
+new_particles = []
+for i in range(num_particles):
+  part = [i + 1, ptype[i%num_one_copy], mass,
+  Real3D(x[i], y[i], z[i]),
+  Real3D(vx[i%num_one_copy], vy[i%num_one_copy], vz[i%num_one_copy])]
+  new_particles.append(part)
+  if (i+1) % monomers_per_chain == 0:
+    system.storage.addParticles(new_particles, *props)
+    system.storage.decompose()
+    new_particles = []
+system.storage.addParticles(new_particles, *props)
 system.storage.decompose()
-del bonds
-del angles
 #sys.exit(0)
 
 # Lennard-Jones with Verlet list
@@ -194,20 +204,24 @@ interLJ = espressopp.interaction.VerletListLennardJones(vl)
 interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
 system.addInteraction(interLJ)
 
-if (ifbond):
-  print("Num_BondList  = ", bondlist.size())
-  #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
-  #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
-  #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
-  #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
-  potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
-  interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
-  system.addInteraction(interFENE)
+bondlist = espressopp.FixedPairList(system.storage)
+anglelist = espressopp.FixedTripleList(system.storage)
+bondlist.addBonds(bonds)
+anglelist.addTriples(angles)
+del bonds
+del angles
+#potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
+#interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
+#potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
+#interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
+potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
+interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
+system.addInteraction(interFENE)
 # Cosine with FixedTriple list
-  potCosine = espressopp.interaction.Cosine(K=1.5, theta0=0.0)
-  interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
-  #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
-  system.addInteraction(interCosine)
+potCosine = espressopp.interaction.Cosine(K=1.5, theta0=0.0)
+interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
+#interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
+system.addInteraction(interCosine)
 
 
 # integrator
@@ -216,18 +230,16 @@ integrator.dt = timestep
 
 if (dpd):
   thermo=espressopp.integrator.DPDThermostat(system, vl, ntotal=num_particles)
-  thermo.gamma = 005.0
+  thermo.gamma = 1.0
   thermo.tgamma = 0.0
   thermo.temperature = temperature
   integrator.addExtension(thermo)
 else:
   thermo = espressopp.integrator.LangevinThermostat(system)
-  thermo.gamma = 005.0
+  thermo.gamma = 1.0
   thermo.temperature = temperature
   integrator.addExtension(thermo)
   
-  
-system.bc          = espressopp.bc.OrthorhombicBC(system.rng, size)
 
 # print simulation parameters
 print(' ')
@@ -252,17 +264,17 @@ pressureTensor = espressopp.analysis.PressureTensor(system)
 
 fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
-#espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
-#espressopp.tools.analyse.info(system, integrator)
-#integrator.run(0)
-#espressopp.tools.analyse.info(system, integrator)
-#sys.exit(0)
+espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+espressopp.tools.analyse.info(system, integrator)
+integrator.run(10)
+espressopp.tools.analyse.info(system, integrator)
+sys.exit(0)
 
 #Equilibration
-print("starting equilibration (TEST) ...")
+print("starting equilibration ...")
 espressopp.tools.analyse.info(system, integrator)
-for step in range(200):
-  integrator.run(50)
+for step in range(equi_nloops):
+  integrator.run(equi_isteps)
   espressopp.tools.analyse.info(system, integrator)
   if (math.isnan(interFENE.computeEnergy())):
     print("FENE becomes NaN after equilibration")
@@ -314,146 +326,30 @@ filename = "traj.pdb"
 if os.path.exists(filename):
   os.remove(filename)
 
-#Preparation
-if FLAG_MD:
-  pos = espressopp.analysis.Configurations(system)
-  vel = espressopp.analysis.Velocities(system)
-  bin_size=50
-  mass=1 #here assume all mass=1
-  #integrator2.run(0)
-  pos.capacity=1
-  vel.capacity=1
-
 start_time = time.process_time()
 for step in range(prod_nloops+1):
   if step > 0:  
     integrator2.run(prod_isteps)
     espressopp.tools.analyse.info(system, integrator2)
-    if ifVisc:
-      print("SIGXZ> %d %.6f" % (step*prod_isteps,system.sumP_xz))
     if (math.isnan(interFENE.computeEnergy())):
       print("FENE becomes NaN during production")
       sys.exit(0)
     #espressopp.tools.pdb.pdbwrite(filename, system, append=True)
     #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
-  
-  if FLAG_MD:
-    #fetch coordinates and velocities
-    pos.gather()
-    vel.gather()
-    #get no. of the current step
-    currentStep=step*prod_isteps
-    #Init
-    if not skipProf:
-      cnt=[0]*bin_size
-      vx =[0]*bin_size
-      vz =[0]*bin_size
-      sx =[0]*bin_size
-      ty =[0]*bin_size
-      tz =[0]*bin_size
-    mo=[.0,.0,.0,.0]
-    #ori=[[.0,.0,.0]]*num_chains
-    for j in range(1,num_particles+1):
-      #print "IDX>",j
-      # define shear speed of the current particle
-      spdShear=shear_rate*(pos[0][j][2]-Lz/2.0)
-      
-      #momentum
-      mo[0]+=vel[0][j][0]
-      mo[1]+=vel[0][j][1]
-      mo[2]+=vel[0][j][2]
-      mo[3]+=vel[0][j][0]+spdShear
-      
-      #profile
-      if not skipProf:
-        bid=int(pos[0][j][2]/Lz*bin_size)
-        if bid<0:
-          bid=0
-        elif bid>=bin_size:
-          bid=bin_size-1
-        #collect profile info by layers along gradient-dir
-        cnt[bid]+=1;
-        vx[bid]+=vel[0][j][0]
-        vz[bid]+=vel[0][j][2]
-        sx[bid]+=vel[0][j][0]+spdShear
-        ty[bid]+=vel[0][j][1]*vel[0][j][1]*mass/1.0
-        tz[bid]+=vel[0][j][2]*vel[0][j][2]*mass/1.0
-      
-      #collect end-to-end orientation (normailized)
-      if not skipOri:
-        print("Current Orientation is wrong(shearOffset)")
-        sys.exit(0)
-        mono_idx=(j-1)%monomers_per_chain
-        chain_idx=(j-1-mono_idx)/monomers_per_chain
-        if chain_idx<nc_print:
-          if mono_idx==0:
-            ori=Real3D(.0,.0,.0)
-            dim=[0,0,0]
-            ori-=pos[0][j]
-          else:
-            l=pos[0][j]-pos[0][j-1]
-            if l[0]<-Lx/2.0:
-              dim[0]+=1
-            elif l[0]>Lx/2.0:
-              dim[0]-=1
-            if l[1]<-Ly/2.0:
-              dim[1]+=1
-            elif l[1]>Ly/2.0:
-              dim[1]-=1
-            if l[2]<-Lz/2.0:
-              dim[2]+=1
-            elif l[2]>Lz/2.0:
-              dim[2]-=1
-            if mono_idx==monomers_per_chain-1:
-              ori+=pos[0][j]
-              ori+=Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz)
-              ori_abs=ori.abs()
-              print("CHAIN-%0d> %10d %.6f %.6f %.6f" %(chain_idx,currentStep,ori[0]/ori_abs,ori[1]/ori_abs,ori[2]/ori_abs))
-              del ori
-              #gc.collect()
-    
-    #print data
-    print("MOMENTUM> %10d %.6f %.6f %.6f %.6f" %(currentStep,mo[0]/num_particles,mo[1]/num_particles,mo[2]/num_particles,mo[3]/num_particles))
-    if not skipProf:
-      for j in range(bin_size):
-        #print "COUNT>",cnt[j]
-        zb=(j+0.5)/bin_size
-        if cnt[j]>0:
-          print("DISTR> %10d %.3f %.6f" %(currentStep,zb,cnt[j]/num_particles*bin_size))
-          print("VX> %10d %.3f %.6f" %(currentStep,zb,vx[j]/cnt[j]))
-          print("VZ> %10d %.3f %.6f" %(currentStep,zb,vz[j]/cnt[j]))
-          if shear_rate>.0:
-            print("VSHEAR> %10d %.3f %.6f" %(currentStep,zb,sx[j]/cnt[j]/(shear_rate*Lz/2.0)))
-          print("TY> %10d %.3f %.6f" %(currentStep,zb,ty[j]/cnt[j]))
-          print("TZ> %10d %.3f %.6f" %(currentStep,zb,tz[j]/cnt[j]))
-        
-    #release memory
-      del cnt
-      del vx 
-      del vz 
-      del sx 
-      del ty 
-      del tz 
-    del mo 
-    #gc.collect()
-    #pos.clear()
-    #vel.clear()
 
 end_time = time.process_time()
 print("production finished")
 
-if (ifbond):
-  T = temperature.compute()
-  P = pressure.compute()
-  Pij = pressureTensor.compute()
-  Ek = 0.5 * T * (3 * num_particles)
-  Ep = interLJ.computeEnergy()
-  Eb = interFENE.computeEnergy()
-  #Ea = interCosine.computeEnergy()
-  Etotal = Ek + Ep + Eb #+ Ea
-  #sys.stdout.write(fmt % (prod_nloops*prod_isteps, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
-  sys.stdout.write(fmt % (prod_nloops*prod_isteps, T, P, Pij[3], Etotal, Ek, Ep, Eb, 0.0))
-  sys.stdout.write('\n')
+T = temperature.compute()
+P = pressure.compute()
+Pij = pressureTensor.compute()
+Ek = 0.5 * T * (3 * num_particles)
+Ep = interLJ.computeEnergy()
+Eb = interFENE.computeEnergy()
+Ea = interCosine.computeEnergy()
+Etotal = Ek + Ep + Eb + Ea
+sys.stdout.write(fmt % (prod_nloops*prod_isteps, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
+sys.stdout.write('\n')
 
 # print timings and neighbor list information
 timers.show(integrator2.getTimers(), precision=3)
@@ -462,234 +358,3 @@ sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl.totalSize() / float(num_partic
 sys.stdout.write('Neighbor list builds = %d\n' % vl.builds)
 sys.stdout.write('Integration steps = %d\n' % integrator2.step)
 sys.stdout.write('CPUs = %i CPU time per CPU = %.1f\n' % (comm.size,end_time - start_time))
-
-# set all integrator2 timers to zero again 
-integrator2.resetTimers()
-# set integrator time step to zero again
-integrator2.step = 0
-
-########################################################################
-# RUN PPA                                                              #
-########################################################################
-if not skipPPA:
-  #if os.path.exists("FLAG_V"):
-  #  os.remove("FLAG_V")
-  
-  system.removeInteraction(2)
-  system.removeInteraction(1)
-  system.removeInteraction(0) 
-  thermo.disconnect()
-  # the equilibration uses a different interaction cutoff therefore the current
-  # verlet list is not needed any more and would waste only CPU time
-  
-  exlist=[]
-  for nc in range(num_chains):
-    for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
-      for j in range(i+1,(nc+1)*monomers_per_chain+1):
-        exlist.append((i,j))
-  vl.exclude(exlist)
-  potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-  interLJ = espressopp.interaction.VerletListLennardJones(vl)
-  interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
-  system.addInteraction(interLJ)
-  
-  if (ifbond):
-    #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
-    #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
-    #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.49)
-    #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
-    potFENE = espressopp.interaction.FENE(K=100.0, r0=0.0, rMax=1.5)
-    interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
-    system.addInteraction(interFENE)
-  ## Cosine with FixedTriple list
-  #   potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
-  #   interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
-  #   #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
-  #   system.addInteraction(interCosine)
-  
-  # fix x,y and z coord axis
-  print("Fix head-end of all polymer chains")
-  fixMask = espressopp.Int3D(1,1,1)
-  # create a particel group that will contain the fixed particles
-  fixedWall  = espressopp.ParticleGroup(system.storage)
-  
-  for nc in range(num_chains):
-    fixedWall.add(nc*monomers_per_chain+1)
-    fixedWall.add((nc+1)*monomers_per_chain)
-    
-  system.storage.decompose()
-  fixpositions = espressopp.integrator.FixPositions(system, fixedWall, fixMask)
-  integrator.addExtension(fixpositions)
-  espressopp.tools.analyse.info(system, integrator)
-  
-  zero_vel = espressopp.Real3D(0.)
-  for i in range(1,num_particles+1):
-    #i=0
-    system.storage.modifyParticle(i, 'v', zero_vel)
-    #v = system.storage.getParticle(i).v
-    #print "V2: ",v
-    #sys.exit(0)
-  
-  thermostat = espressopp.integrator.LangevinThermostat(system)
-  thermostat.gamma = 20.0
-  thermostat.temperature = 0.001
-  integrator.addExtension(thermostat)
-  system.storage.decompose()
-  
-  file2="traj_ppa.pdb"
-  for step in range(20):
-    integrator.run(50)
-    espressopp.tools.analyse.info(system, integrator)
-    if (math.isnan(interFENE.computeEnergy())):
-      print("FENE becomes NaN during production")
-      sys.exit(0)
-    #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
-    #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
-    
-  thermostat.gamma=0.5 
-  for step in range(200):
-    integrator.run(100)
-    espressopp.tools.analyse.info(system, integrator)
-    if (math.isnan(interFENE.computeEnergy())):
-      print("FENE becomes NaN during production")
-      sys.exit(0)
-    #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
-    #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
-  
-  # post-analysis
-  conf = espressopp.analysis.Configurations(system)
-  conf.gather()
-  r2_sum=0
-  cnt=0
-  clen=[]
-  diam=[]
-  rlen=[]
-  kink_60  = []
-  kink_90  = []
-  kink_all = []
-  for i in range(num_chains):
-    dim=[0,0,0]
-    lsum=0
-    #coor=[]
-    jj=monomers_per_chain*i+1
-    #coor.append(conf[0][jj])
-    #coor.append(conf[0][jj])
-    
-    bvec=[]
-    agl_jj5=np.array([])
-  
-    for j in range(1,monomers_per_chain):
-      jj=monomers_per_chain*i+j
-      l=conf[0][jj+1]-conf[0][jj]
-      if l[2]<-Lz/2.0:
-        dim[2]+=1
-        l[2]+=Lz
-        l[0]+=system.shearOffset
-      elif l[2]>Lz/2.0:
-        dim[2]-=1
-        l[2]-=Lz
-        l[0]-=system.shearOffset
-      if l[1]<-Ly/2.0:
-        dim[1]+=1
-        l[1]+=Ly
-      elif l[1]>Ly/2.0:
-        dim[1]-=1
-        l[1]-=Ly
-      if l[0]<-Lx/2.0:
-         while l[0]<-Lx/2.0:
-          dim[0]+=1
-          l[0]+=Lx
-      elif l[0]>Lx/2.0:
-        while l[0]>Lx/2.0:
-          dim[0]-=1
-          l[0]-=Lx
-      
-      lsum+=l.abs()
-      
-      bvec.append(l)
-      if j>5:
-        agl_jj5=np.append(agl_jj5,vec_angle(bvec[j-6],bvec[j-1]))
-    
-    local_max=argrelextrema(agl_jj5, np.greater)
-    cnt_60=0
-    cnt_90=0
-    cnt_all=0
-    for k in range(len(local_max[0])):
-      if agl_jj5[local_max[0][k]]>60.0:
-        cnt_60+=1
-        if agl_jj5[local_max[0][k]]>90.0:
-          cnt_90+=1
-      cnt_all+=1
-    kink_60.append(cnt_60)
-    kink_90.append(cnt_90)
-    kink_all.append(cnt_all)
-    del agl_jj5
-    del bvec
-    
-    #coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
-    #coor[0][0]+=coor[j+1][0]
-    #coor[0][1]+=coor[j+1][1]
-    #coor[0][2]+=coor[j+1][2]
-    clen.append(lsum)
-    
-    #coor[0][0]/=monomers_per_chain
-    #coor[0][1]/=monomers_per_chain
-    #coor[0][2]/=monomers_per_chain
-    ##print "COOR> ",i,coor
-    
-    #maxd=0
-    #for j in range(1,monomers_per_chain):
-    #  dtmp=coor[j]-coor[0]
-    #  if (dtmp.abs()>maxd):
-    #    maxd=dtmp.abs()
-    #diam.append(maxd*2.0)
-    
-    rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
-    rtmp[2]+=float(dim[2])*Lz
-    rtmp[0]+=float(dim[2])*system.shearOffset
-    rtmp[1]+=float(dim[1])*Ly
-    rtmp[0]+=float(dim[0])*Lx
-    r2_sum+=rtmp.abs()**2
-    rlen.append(rtmp.abs())
-    
-#Summarize the analysis
-  r2_msq=r2_sum/num_chains
-  klen=[]
-  elen=[]
-  znum=[]
-  #tbd=[]
-  for i in range(num_chains):
-    c2=clen[i]**2
-    r2=rlen[i]**2
-    klen.append(r2/clen[i])
-    elen.append(r2/c2*float(monomers_per_chain-1))
-    #tbd.append(math.sqrt(elen[i])*clen[i]/(monomers_per_chain-1))
-    znum.append(float(monomers_per_chain)/float(monomers_per_chain-1)*(c2/r2-1))
-    
-  print("---------------")
-  print("OFFSET> ",system.shearOffset)
-  print("R_SQUARE> ",r2_msq)
-  print("R_MEAN> ",math.sqrt(r2_msq))
-  print("---------------")
-  print("CONTOUR> ",clen[0:nc_print])
-  print("CT_AVG> ",sum(clen)/float(len(clen)))
-  print("---------------")
-  print("KUHN> ",klen[0:nc_print])
-  print("APP_AVG> ",sum(klen)/float(len(klen)))
-  print("---------------")
-  bpp=[x/(monomers_per_chain-1) for x in clen]
-  print("BPP> ",bpp[0:nc_print])
-  print("BPP_AVG> ",sum(bpp)/float(len(bpp)))
-  print("---------------")
- #print("TUBED> ",tbd)
- #print("DIAMETER> ",diam)
- #print("---------------")
-  print("NENTANG> ",elen[0:nc_print])
-  print("N_AVG> ",sum(elen)/float(len(elen)))
-  print("---------------")
-  print("ZENTANG> ",znum[0:nc_print])
-  print("Z_AVG> ",sum(znum)/float(len(znum)))
-  print("---------------")
-  print("KINKS> ",kink_60[0:nc_print])
-  print("K_AVG> ",sum(kink_60)/float(len(kink_60)),sum(kink_90)/float(len(kink_90)),sum(kink_all)/float(len(kink_all)))
-  print("---------------")
