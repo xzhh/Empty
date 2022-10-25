@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 #
 #  Copyright (C) 2013-2017(H)
 #      Max Planck Institute for Polymer Research
@@ -33,44 +33,52 @@ import random
 import math
 import mpi4py.MPI as MPI
 import logging
+import numpy as np
+from scipy.signal import argrelextrema
 from espressopp import Real3D, Int3D
 from espressopp.tools import lammps, gromacs
 from espressopp.tools import decomp, timers, replicate
 import os
 #import gc
 
+def vec_angle(v1, v2):
+  """ Returns the angle in radians between vectors 'v1' and 'v2'::
+
+          >>> angle_between((1, 0, 0), (0, 1, 0))
+          1.5707963267948966
+          >>> angle_between((1, 0, 0), (1, 0, 0))
+          0.0
+          >>> angle_between((1, 0, 0), (-1, 0, 0))
+          3.141592653589793
+  """
+  v1_u = v1/np.linalg.norm(v1)
+  v2_u = v2/np.linalg.norm(v2)
+  return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))/np.pi*180.0
+    
 # simulation parameters (nvt = False is nve)
-ifVisc=False
-if os.path.exists("FLAG_VIS"):
-    ifVisc=True
-rc = 1.12 ##pow(2.0, 1.0/6.0)
+rc = pow(2.0, 1.0/6.0)
 skin = 0.3
+ifVisc = True
 dpd = True
 ifbond = True
 skipPPA=False
 skipProf=True
 skipOri=True
-skipMSID=True
 FLAG_MD=not (skipProf and skipOri)
-shear_rate = 0.0001
+shear_rate = 0.1
 timestep = 0.002
 
 # set parameters for simulations
 seed               = 654321  # seed for random
-density            = 0.84
+density            = 0.849
 bondlen            = 0.97
-monomers_per_chain = 50      # the number of monomers per a chain
+monomers_per_chain = 100      # the number of monomers per a chain
 num_chains         = 15*monomers_per_chain     # the number of chains
 nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
 
-warmup_nloops      = 2000 # based on normal timestep
-warmup_isteps      = 50
-equi_nloops = 20000 # based on normal timestep
-equi_isteps = 100
-
 # number of prod loops
-prod_nloops       = 20000 #200
+prod_nloops       = 50000 #200
 # number of integration steps performed in each production loop
 prod_isteps       = 50
 msid_nloops = prod_nloops/4
@@ -104,6 +112,7 @@ if comm.size>4 and comm.size%4 ==0:
   nodeGrid = espressopp.Int3D(comm.size/4,2,2)
 else:
   nodeGrid = espressopp.tools.decomp.nodeGrid(comm.size,size,rc,skin)
+#nodeGrid = espressopp.tools.decomp.nodeGrid(n=comm.size,rc=rc,skin=skin)
 cellGrid = espressopp.tools.decomp.cellGrid(size,nodeGrid,rc,skin)
 system.storage = espressopp.storage.DomainDecomposition(system, nodeGrid, cellGrid)
 
@@ -132,12 +141,12 @@ anglelist = espressopp.FixedTripleList(system.storage)
 pid      = 1
 mass     = 1.0
 
-bonds = []
-angles = []
+#bonds = []
+#angles = []
 for i in range(num_chains):
   polymer_chain       = []
-  #bonds = []
-  #angles = []
+  bonds = []
+  angles = []
   
   for k in range(monomers_per_chain):
     col     = file.readline().split()
@@ -152,47 +161,50 @@ for i in range(num_chains):
       part_pos  = espressopp.Real3D(float(col[1]), float(col[2]), float(col[3]))
       part_vel  = espressopp.Real3D(float(col[4]), float(col[5]), float(col[6]))
 
-    particle   = [pid, part_type, mass, part_pos, part_vel]
+    particle   = [pid+k, part_type, mass, part_pos, part_vel]
     polymer_chain.append(particle)
-   
+    
+    #if i==0:
+    #  print(particle)
     if k < monomers_per_chain-1:
       bonds.append((pid+k,pid+k+1))
 	
     if k < monomers_per_chain-2:
       angles.append((pid+k, pid+k+1, pid+k+2))
     
-  #print(len(col),bonds)
+  #print(len(col),angles[0])
 
   system.storage.addParticles(polymer_chain, *props)
   system.storage.decompose()
- 
+  bondlist.addBonds(bonds)
+  anglelist.addTriples(angles)
+  
   pid += monomers_per_chain
 
 file.close()
-
-bondlist.addBonds(bonds)
-anglelist.addTriples(angles)
+system.storage.decompose()
 del bonds
 del angles
-#sys.exit(0) 
+#sys.exit(0)
 
 # Lennard-Jones with Verlet list
-vl = espressopp.VerletList(system, cutoff = rc + system.skin)
+vl = espressopp.VerletList(system, cutoff = rc + system.skin/2.0)
 potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
 interLJ = espressopp.interaction.VerletListLennardJones(vl)
 interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
 system.addInteraction(interLJ)
 
-# Prepare FENE bonds
 if (ifbond):
   print("Num_BondList  = ", bondlist.size())
+  #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
+  #interFENE = espressopp.interaction.FixedPairListHarmonic(system, bondlist, potFENE)
   #potFENE = espressopp.interaction.FENECapped(K=30.0, r0=0.0, rMax=1.5, r_cap=1.499)
   #interFENE = espressopp.interaction.FixedPairListFENECapped(system, bondlist, potFENE)
   potFENE = espressopp.interaction.FENE(K=30.0, r0=0.0, rMax=1.5)
   interFENE = espressopp.interaction.FixedPairListFENE(system, bondlist, potFENE)
   system.addInteraction(interFENE)
 # Cosine with FixedTriple list
-  potCosine = espressopp.interaction.Cosine(K=1.5, theta0=3.1415926)
+  potCosine = espressopp.interaction.Cosine(K=1.5, theta0=0.0)
   interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
   #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
   system.addInteraction(interCosine)
@@ -204,15 +216,16 @@ integrator.dt = timestep
 
 if (dpd):
   thermo=espressopp.integrator.DPDThermostat(system, vl, ntotal=num_particles)
-  thermo.gamma=5.0
-  thermo.tgamma=0.0
+  thermo.gamma = 005.0
+  thermo.tgamma = 0.0
   thermo.temperature = temperature
   integrator.addExtension(thermo)
 else:
   thermo = espressopp.integrator.LangevinThermostat(system)
-  thermo.gamma = 5.0
+  thermo.gamma = 005.0
   thermo.temperature = temperature
   integrator.addExtension(thermo)
+  
   
 system.bc          = espressopp.bc.OrthorhombicBC(system.rng, size)
 
@@ -223,7 +236,7 @@ print('density = %.4f' % (density))
 print('rc =', rc)
 print('dt =', integrator.dt)
 print('skin =', system.skin)
-print('thermostat =', dpd)
+print('thermostat(DPD) =', dpd)
 print('steps =', prod_nloops*prod_isteps)
 print('NodeGrid = %s' % (nodeGrid))
 print('CellGrid = %s' % (cellGrid))
@@ -232,15 +245,45 @@ print(' ')
 # analysis
 #conf = espressopp.analysis.Configurations(system)
 #conf.gather()
+
 temperature = espressopp.analysis.Temperature(system)
 pressure = espressopp.analysis.Pressure(system)
 pressureTensor = espressopp.analysis.PressureTensor(system)
 
 fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 
-integrator.run(0)
-espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+#espressopp.tools.pdb.pdbwrite('input.pdb', system, append=True)
+#espressopp.tools.analyse.info(system, integrator)
+#integrator.run(0)
+#espressopp.tools.analyse.info(system, integrator)
 #sys.exit(0)
+
+#Equilibration
+print("starting equilibration (TEST) ...")
+espressopp.tools.analyse.info(system, integrator)
+for step in range(200):
+  integrator.run(50)
+  espressopp.tools.analyse.info(system, integrator)
+  if (math.isnan(interFENE.computeEnergy())):
+    print("FENE becomes NaN after equilibration")
+    sys.exit(0)
+print("equilibration finished")
+print("NRESORT>", integrator.getNumResorts())
+
+#T = temperature.compute()
+#P = pressure.compute()
+#Pij = pressureTensor.compute()
+#Ek = 0.5 * T * (3 * num_particles)
+#Ep = interLJ.computeEnergy()
+#Eb = interFENE.computeEnergy()
+#Ea = interCosine.computeEnergy()
+#Etotal = Ek + Ep + Eb + Ea
+#sys.stdout.write(' step     T          P       Pxy        etotal      ekinetic      epair        ebond       eangle\n')
+#sys.stdout.write(fmt % (0, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
+
+########################################################################
+# RUN shear flow MD                                                    #
+########################################################################
 
 # cancelling thermostat
 #thermo.disconnect()
@@ -249,16 +292,8 @@ integrator.resetTimers()
 # set integrator time step to zero again
 integrator.step = 0
 
-#print("equilibration finished")
-#print("NRESORT>", integrator.getNumResorts())
-
-########################################################################
-# RUN shear flow MD                                                  #
-########################################################################
-
-
 if (shear_rate>0.0):
-  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=True)
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=ifVisc)
 else:
   integrator2     = espressopp.integrator.VelocityVerlet(system)
 # set the integration step  
@@ -289,22 +324,8 @@ if FLAG_MD:
   pos.capacity=1
   vel.capacity=1
 
-if not skipMSID:
-  msid = espressopp.analysis.MeanSquareInternalDist(system,monomers_per_chain,start_pid=1)
 start_time = time.process_time()
 for step in range(prod_nloops+1):
-  if (not skipMSID) and (step % msid_nloops ==0):
-    msid.gather()
-    result = msid.compute()
-    file_MSID = open("msid.dat","a")
-    for i in xrange(monomers_per_chain-1):
-      line = "%d %f\n" % (i+1,result[i]/(i+1))
-      file_MSID.write(line)
-    line="\n"
-    file_MSID.write(line)
-    file_MSID.close()
-    del result
-
   if step > 0:  
     integrator2.run(prod_isteps)
     espressopp.tools.analyse.info(system, integrator2)
@@ -436,9 +457,9 @@ if (ifbond):
 
 # print timings and neighbor list information
 timers.show(integrator2.getTimers(), precision=3)
-sys.stdout.write('Total # of neighbors = %d\n' % vl_inter.totalSize())
-sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl_inter.totalSize() / float(num_particles)))
-sys.stdout.write('Neighbor list builds = %d\n' % vl_inter.builds)
+sys.stdout.write('Total # of neighbors = %d\n' % vl.totalSize())
+sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl.totalSize() / float(num_particles)))
+sys.stdout.write('Neighbor list builds = %d\n' % vl.builds)
 sys.stdout.write('Integration steps = %d\n' % integrator2.step)
 sys.stdout.write('CPUs = %i CPU time per CPU = %.1f\n' % (comm.size,end_time - start_time))
 
@@ -454,17 +475,23 @@ if not skipPPA:
   #if os.path.exists("FLAG_V"):
   #  os.remove("FLAG_V")
   
-  system.removeInteraction(2) 
-  system.removeInteraction(1) 
-  #system.removeInteraction(0) 
+  system.removeInteraction(2)
+  system.removeInteraction(1)
+  system.removeInteraction(0) 
   thermo.disconnect()
   # the equilibration uses a different interaction cutoff therefore the current
   # verlet list is not needed any more and would waste only CPU time
   
-  #potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
-  #interLJ = espressopp.interaction.VerletListLennardJones(vl_inter)
-  #interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
-  #system.addInteraction(interLJ)
+  exlist=[]
+  for nc in range(num_chains):
+    for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
+      for j in range(i+1,(nc+1)*monomers_per_chain+1):
+        exlist.append((i,j))
+  vl.exclude(exlist)
+  potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
+  interLJ = espressopp.interaction.VerletListLennardJones(vl)
+  interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
+  system.addInteraction(interLJ)
   
   if (ifbond):
     #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
@@ -519,7 +546,7 @@ if not skipPPA:
     #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
     #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
     
-  thermostat.gamma=0.5
+  thermostat.gamma=0.5 
   for step in range(200):
     integrator.run(100)
     espressopp.tools.analyse.info(system, integrator)
@@ -537,6 +564,9 @@ if not skipPPA:
   clen=[]
   diam=[]
   rlen=[]
+  kink_60  = []
+  kink_90  = []
+  kink_all = []
   for i in range(num_chains):
     dim=[0,0,0]
     lsum=0
@@ -544,6 +574,9 @@ if not skipPPA:
     jj=monomers_per_chain*i+1
     #coor.append(conf[0][jj])
     #coor.append(conf[0][jj])
+    
+    bvec=[]
+    agl_jj5=np.array([])
   
     for j in range(1,monomers_per_chain):
       jj=monomers_per_chain*i+j
@@ -563,18 +596,40 @@ if not skipPPA:
         dim[1]-=1
         l[1]-=Ly
       if l[0]<-Lx/2.0:
-        while l[0]<-Lx/2.0:
+         while l[0]<-Lx/2.0:
           dim[0]+=1
           l[0]+=Lx
       elif l[0]>Lx/2.0:
         while l[0]>Lx/2.0:
           dim[0]-=1
           l[0]-=Lx
+      
       lsum+=l.abs()
-      #coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
-      #coor[0][0]+=coor[j+1][0]
-      #coor[0][1]+=coor[j+1][1]
-      #coor[0][2]+=coor[j+1][2]
+      
+      bvec.append(l)
+      if j>5:
+        agl_jj5=np.append(agl_jj5,vec_angle(bvec[j-6],bvec[j-1]))
+    
+    local_max=argrelextrema(agl_jj5, np.greater)
+    cnt_60=0
+    cnt_90=0
+    cnt_all=0
+    for k in range(len(local_max[0])):
+      if agl_jj5[local_max[0][k]]>60.0:
+        cnt_60+=1
+        if agl_jj5[local_max[0][k]]>90.0:
+          cnt_90+=1
+      cnt_all+=1
+    kink_60.append(cnt_60)
+    kink_90.append(cnt_90)
+    kink_all.append(cnt_all)
+    del agl_jj5
+    del bvec
+    
+    #coor.append(conf[0][jj+1]+Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz))
+    #coor[0][0]+=coor[j+1][0]
+    #coor[0][1]+=coor[j+1][1]
+    #coor[0][2]+=coor[j+1][2]
     clen.append(lsum)
     
     #coor[0][0]/=monomers_per_chain
@@ -597,7 +652,7 @@ if not skipPPA:
     r2_sum+=rtmp.abs()**2
     rlen.append(rtmp.abs())
     
-  
+#Summarize the analysis
   r2_msq=r2_sum/num_chains
   klen=[]
   elen=[]
@@ -612,6 +667,7 @@ if not skipPPA:
     znum.append(float(monomers_per_chain)/float(monomers_per_chain-1)*(c2/r2-1))
     
   print("---------------")
+  print("OFFSET> ",system.shearOffset)
   print("R_SQUARE> ",r2_msq)
   print("R_MEAN> ",math.sqrt(r2_msq))
   print("---------------")
@@ -633,4 +689,7 @@ if not skipPPA:
   print("---------------")
   print("ZENTANG> ",znum[0:nc_print])
   print("Z_AVG> ",sum(znum)/float(len(znum)))
+  print("---------------")
+  print("KINKS> ",kink_60[0:nc_print])
+  print("K_AVG> ",sum(kink_60)/float(len(kink_60)),sum(kink_90)/float(len(kink_90)),sum(kink_all)/float(len(kink_all)))
   print("---------------")
