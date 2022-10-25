@@ -66,7 +66,7 @@ timestep = 0.002
 seed               = 654321  # seed for random
 density            = 0.849
 bondlen            = 0.97
-monomers_per_chain = 100      # the number of monomers per a chain
+monomers_per_chain = 50      # the number of monomers per a chain
 num_chains         = 15*monomers_per_chain     # the number of chains
 nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
@@ -154,7 +154,7 @@ for i in range(num_chains):
 
 file.close()
 
-replicate   = (NumDup*3,NumDup*3,NumDup*1)
+replicate   = (NumDup*1,NumDup*3,NumDup*3)
 rp = espressopp.tools.ReplicateParallel()
 num_particles, Lx, Ly, Lz = rp.replicate(bonds, angles, x, y, z, Lx, Ly, Lz, *replicate)
 
