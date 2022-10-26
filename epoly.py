@@ -148,7 +148,6 @@ if (ifbond):
 
 # integrator
 integrator = espressopp.integrator.VelocityVerlet(system)
-  
 integrator.dt = timestep
 
 if(nvt):

@@ -183,17 +183,18 @@ props    = ['id', 'type', 'mass', 'pos', 'v']
 vel_zero = espressopp.Real3D(0.0, 0.0, 0.0)
 pid      = 1
 mass     = 1.0
-new_particles = []
-for i in range(num_particles):
-  part = [i + 1, ptype[i%num_one_copy], mass,
+seed_particles = []
+for i in range(num_one_copy):
+  part = [i + 1, ptype[i], mass,
   Real3D(x[i], y[i], z[i]),
-  Real3D(vx[i%num_one_copy], vy[i%num_one_copy], vz[i%num_one_copy])]
-  new_particles.append(part)
-  if (i+1) % monomers_per_chain == 0:
-    system.storage.addParticles(new_particles, *props)
-    system.storage.decompose()
-    new_particles = []
-system.storage.addParticles(new_particles, *props)
+  Real3D(vx[i], vy[i], vz[i])]
+  seed_particles.append(part)
+  #if (i+1) % monomers_per_chain == 0:
+  #  system.storage.addParticles(new_particles, *props)
+  #  system.storage.decompose()
+  #  new_particles = []
+#system.storage.addParticles(new_particles, *props)
+rp.addParticles(system.storage, 1, seed_particles, *props)
 system.storage.decompose()
 #sys.exit(0)
 
@@ -206,8 +207,10 @@ system.addInteraction(interLJ)
 
 bondlist = espressopp.FixedPairList(system.storage)
 anglelist = espressopp.FixedTripleList(system.storage)
-bondlist.addBonds(bonds)
-anglelist.addTriples(angles)
+#bondlist.addBonds(bonds)
+#anglelist.addTriples(angles)
+rp.addBonds(bondlist)
+rp.addTriples(anglelist)
 del bonds
 del angles
 #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
@@ -222,7 +225,6 @@ potCosine = espressopp.interaction.Cosine(K=1.5, theta0=0.0)
 interCosine = espressopp.interaction.FixedTripleListCosine(system, anglelist, potCosine)
 #interCosine.setPotential(type1 = 0, type2 = 0, potential = potCosine)
 system.addInteraction(interCosine)
-
 
 # integrator
 integrator = espressopp.integrator.VelocityVerlet(system)
