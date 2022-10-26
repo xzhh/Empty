@@ -51,23 +51,24 @@ ifbond = True
 skipEqui=False
 FLAG_ON=False
 ifanal=False
-shear_rate = 0.1
+shear_rate = 0.0
 timestep = 0.002
 Temp=1.0
 
-equi_nloops = 2000
-equi_isteps = 100
+equi_nloops = 200
+equi_isteps = 50
 # number of prod loops
-prod_nloops       = 1 #ALWAYS =1 for benchmark
+prod_nloops       = 40000 #200
 # number of integration steps performed in each production loop
-prod_isteps       = 25000
+prod_isteps       = 50
+msid_nloops = prod_nloops/4
 
 ######################################################################
 ### IT SHOULD BE UNNECESSARY TO MAKE MODIFICATIONS BELOW THIS LINE ###
 ######################################################################
 sys.stdout.write('Setting up simulation ...\n')
 
-replicate   = (18,12,12)
+replicate   = (1,1,1)
 bonds, angles, x, y, z, Lx, Ly, Lz = lammps.read('polymer_melt.lammps')
 #bonds, angles, x, y, z, Lx, Ly, Lz = espressopp.tools.lammps.read('polymer_melt.lammps')
 rp = espressopp.tools.ReplicateParallel()
@@ -151,7 +152,7 @@ integrator.dt = timestep
 
 if(nvt):
   langevin = espressopp.integrator.LangevinThermostat(system)
-  langevin.gamma = 0.5
+  langevin.gamma = 1.0
   langevin.temperature = Temp
   integrator.addExtension(langevin)
   
@@ -192,18 +193,6 @@ if not skipEqui:
      #print "MEMINFO> ",step,mem_info
      espressopp.tools.analyse.info(system, integrator)
    print("equilibration finished")
-
-
-#T = temperature.compute()
-#P = pressure.compute()
-#Pij = pressureTensor.compute()
-#Ek = 0.5 * T * (3 * num_particles)
-#Ep = interLJ.computeEnergy()
-#Eb = interFENE.computeEnergy()
-#Ea = interCosine.computeEnergy()
-#Etotal = Ek + Ep + Eb + Ea
-#sys.stdout.write(' step     T          P       Pxy        etotal      ekinetic      epair        ebond       eangle\n')
-#sys.stdout.write(fmt % (0, T, P, Pij[3], Etotal, Ek, Ep, Eb, Ea))
 
 ########################################################################
 # RUN shear flow MD                                                  #
@@ -249,11 +238,25 @@ espressopp.tools.analyse.info(system, integrator2)
 #sock = espressopp.tools.vmd.connect(system)
 filename = "prod.xyz"
 
+msid = espressopp.analysis.MeanSquareInternalDist(system,200,start_pid=1)
 start_time = time.clock()
-for step in range(prod_nloops):
-  integrator2.run(prod_isteps)
-  espressopp.tools.analyse.info(system, integrator2)
-  #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
+for step in range(prod_nloops+1):
+  if step % msid_nloops ==0:
+    msid.gather()
+    result = msid.compute()
+    file_MSID = open("msid.dat","a")
+    for i in xrange(200-1):
+      line = "%d %f\n" % (i+1,result[i]/(i+1))
+      file_MSID.write(line)
+    line="\n"
+    file_MSID.write(line)
+    file_MSID.close()
+    del result
+  
+  if step > 0:
+    integrator2.run(prod_isteps)
+    espressopp.tools.analyse.info(system, integrator2)
+    #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
 end_time = time.clock()
 print("production finished")
 nbuild_end=vl.builds-nbuild_start
