@@ -67,10 +67,8 @@ prod_isteps       = 25000
 ######################################################################
 sys.stdout.write('Setting up simulation ...\n')
 
-replicate   = (1,1,1)
+replicate   = (18,12,12)
 bonds, angles, x, y, z, Lx, Ly, Lz = lammps.read('polymer_melt.lammps')
-print(type(x[0]))
-sys.exit(0)
 #bonds, angles, x, y, z, Lx, Ly, Lz = espressopp.tools.lammps.read('polymer_melt.lammps')
 rp = espressopp.tools.ReplicateParallel()
 num_particles, Lx, Ly, Lz = rp.replicate(bonds, angles, x, y, z, Lx, Ly, Lz, *replicate)
@@ -148,6 +146,7 @@ if (ifbond):
 
 # integrator
 integrator = espressopp.integrator.VelocityVerlet(system)
+  
 integrator.dt = timestep
 
 if(nvt):
