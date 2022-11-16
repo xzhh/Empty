@@ -67,15 +67,14 @@ import os
 ########################################################################
 # 1. specification of the main simulation parameters                   #
 ########################################################################
-ifanal=True
-
+dpd=True
+ifVisc = True
 # number of particles
 Npart              = 2000
 # density of particles
 rho                = 0.844
 # shear rate
-shear_rate         = 0.1 # set 2.0 = a top/bot particle shears by a length of box_L every unit time (ps)
-gamma_coef = 1.0
+shear_rate         = 0.002 # set 2.0 = a top/bot particle shears by a length of box_L every unit time (ps)
 
 # length of simulation box
 Lx = 1
@@ -92,7 +91,9 @@ r_cutoff           = 2.5
 # VerletList skin size (also used for domain decomposition)
 skin               = 0.4
 # the temperature of the system
-temperature        = 1.0
+temperature        = 1.00
+gamma              = 001.0
+thermo_mode        = 0
 # time step for the velocity verlet integrator
 dt                 = 0.002
 # Lennard Jones epsilon during equilibration phase
@@ -121,7 +122,7 @@ equil_nloops       = 1000
 # number of integration steps performed in each equilibration loop
 equil_isteps       = 100
 # number of prod loops
-prod_nloops       = 5000
+prod_nloops       = 50000
 # number of integration steps performed in each production loop
 prod_isteps       = 100
 
@@ -166,8 +167,7 @@ system             = espressopp.System()
 system.rng         = espressopp.esutil.RNG()
 system.rng.seed(irand)
 # use orthorhombic periodic boundary conditions 
-#system.bc          = espressopp.bc.OrthorhombicBC(system.rng, box)
-system.bc          = espressopp.bc.SlabBC(system.rng, box)
+system.bc          = espressopp.bc.OrthorhombicBC(system.rng, box)
 # set the skin size used for verlet lists and cell sizes
 system.skin        = skin
 # get the number of CPUs to use
@@ -182,25 +182,6 @@ system.storage     = espressopp.storage.DomainDecomposition(system, nodeGrid, ce
 print("NCPUs              = ", NCPUs)
 print("nodeGrid           = ", nodeGrid)
 print("cellGrid           = ", cellGrid)
-
-########################################################################
-# 3. setup of the integrator and simulation ensemble                   #
-########################################################################
-
-# use a velocity Verlet integration scheme
-integrator     = espressopp.integrator.VelocityVerlet(system)
-# set the integration step  
-integrator.dt  = dt
-# use a thermostat if the temperature is set
-if (temperature != None):
-  # create e Langevin thermostat
-  thermostat             = espressopp.integrator.LangevinThermostat(system)
-  # set Langevin friction constant
-  thermostat.gamma       = gamma_coef
-  # set temperature
-  thermostat.temperature = temperature
-  # tell the integrator to use this thermostat
-  integrator.addExtension(thermostat)
 
 ## steps 2. and 3. could be short-cut by the following expression:
 ## system, integrator = espressopp.standard_system.Default(box, warmup_cutoff, skin, dt, temperature)
@@ -248,13 +229,34 @@ interaction = espressopp.interaction.VerletListLennardJonesCapped(verletlist)
 # tell the interaction to use the above defined force capped Lennard-Jones potential
 # between 2 particles of type 0 
 interaction.setPotential(type1=0, type2=0, potential=LJpot)
+# make the force capping interaction known to the system
+system.addInteraction(interaction)
+
+########################################################################
+# 3. setup of the integrator and simulation ensemble                   #
+########################################################################
+
+# use a velocity Verlet integration scheme
+integrator     = espressopp.integrator.VelocityVerlet(system)
+# set the integration step  
+integrator.dt  = dt
+
+# use a thermostat if the temperature is set
+if (dpd):
+  thermostat=espressopp.integrator.DPDThermostat(system, verletlist, ntotal=Npart)
+  thermostat.gamma=gamma
+  thermostat.tgamma=0.0
+  thermostat.temperature = temperature
+  integrator.addExtension(thermostat)
+else:
+  thermostat = espressopp.integrator.LangevinThermostat(system)
+  thermostat.gamma =gamma
+  thermostat.temperature = temperature
+  integrator.addExtension(thermostat)
 
 ########################################################################
 # 6. running the warmup loop
 ########################################################################
-
-# make the force capping interaction known to the system
-system.addInteraction(interaction)
 
 print("starting warm-up ...")
 # print some status information (time, measured temperature, pressure,
@@ -282,14 +284,24 @@ verletlist.disconnect()
 
 # create a new verlet list that uses a cutoff radius = r_cutoff
 # the verlet radius is automatically increased by system.skin (see system setup)
-verletlist  = espressopp.VerletList(system, r_cutoff)
+if dpd:
+  thermostat.disconnect()
+  del thermostat
+  verletlist  = espressopp.VerletList(system, r_cutoff)
+  thermostat=espressopp.integrator.DPDThermostat(system, verletlist,ntotal=Npart)
+  thermostat.gamma=gamma
+  thermostat.tgamma=0.0
+  thermostat.temperature = temperature
+  integrator.addExtension(thermostat)
+else:
+  verletlist  = espressopp.VerletList(system, r_cutoff)
 # define a Lennard-Jones interaction that uses a verlet list 
 
 
 interaction = espressopp.interaction.VerletListLennardJones(verletlist)
 potential   = interaction.setPotential(type1=0, type2=0,
                                        potential=espressopp.interaction.LennardJones(epsilon=epsilon, sigma=sigma, 
-                                       cutoff=r_cutoff, shift=0.0))
+                                       cutoff=r_cutoff, shift = "auto"))
 
 
 #interaction = espressopp.interaction.VerletListLennardJones(verletlist)
@@ -342,7 +354,8 @@ integrator.resetTimers()
 integrator.step = 0
 
 if (shear_rate>0.0):
-  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate)
+  integrator2     = espressopp.integrator.VelocityVerletLE(system,shear=shear_rate,viscosity=ifVisc)
+  system.lebcMode = thermo_mode
 else:
   integrator2     = espressopp.integrator.VelocityVerlet(system)
 # set the integration step  
@@ -381,7 +394,7 @@ dz=Lz/float(zbin)
 zvol=dz*Lx*Ly
 
 tstart=time.process_time()
-rstep=int(0.8*prod_nloops) #report after simulation run by 80%
+rstep=int(99.0*prod_nloops) #report after simulation run by 80%
 for step in range(prod_nloops+1):
   if step>0:
     # perform equilibration_isteps integration steps
@@ -436,7 +449,8 @@ for step in range(prod_nloops+1):
           zi=zbin-1
         vshear=shear_rate*(conf[0][k][2]-Lz/2.0)
         znum[zi]+=1
-        vx[zi]+=vel[0][k][0]+vshear
+        if shear_rate > .0:
+          vx[zi]+=vel[0][k][0]+vshear
         tempy[zi]+=vel[0][k][1]*vel[0][k][1]
         tempz[zi]+=vel[0][k][2]*vel[0][k][2]
       
@@ -444,7 +458,8 @@ for step in range(prod_nloops+1):
         if znum[z]>0:
           tempy[z]/=float(znum[z])
           tempz[z]/=float(znum[z])
-          vx[z]/=float(znum[z])*shear_rate*Lz/2.0
+          if shear_rate > .0:
+            vx[z]/=float(znum[z])*shear_rate*Lz/2.0
           zrho[z]=znum[z]/zvol/rho
         
         zpos=float(z+0.5)/float(zbin)
@@ -481,9 +496,9 @@ print("production finished")
 #espressopp.tools.writexyz(filename, system, velocities = True, unfolded = False)
 
 # also write a PDB file which can be used to visualize configuration with VMD
-print("writing pdb file ...")
-filename = "lennard_jones_fluid_%0i.pdb" % integrator.step
-espressopp.tools.pdbwrite(filename, system, molsize=Npart)
+#print("writing pdb file ...")
+#filename = "lennard_jones_fluid_%0i.pdb" % integrator.step
+#espressopp.tools.pdbwrite(filename, system, molsize=Npart)
 
 print("finished.")
 
