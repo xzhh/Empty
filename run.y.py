@@ -76,13 +76,13 @@ timestep = 0.001
 tot_types= 5 # The total num of atomic types, 5 (0~4) in this case
 
 # add shear rate / NSteps
-shear_rate = 0.001
+shear_rate = 0.1
 equi_nloops = 200  # total steps = nloops * isteps
 equi_isteps = 50
 # number of prod loops
-prod_nloops       = 20000 #2 ns
+prod_nloops       = 20000 #1 ns
 # number of integration steps performed in each production loop
-prod_isteps       = 100
+prod_isteps       = 50
 
 # GROMACS tabulated potentials files
 tabCT_CTg = "table_CT_CT.xvg"    # non-bonded
@@ -203,7 +203,12 @@ for pid in range(num_particles):
 system.storage.addParticles(allParticles, *props)    
 system.storage.decompose()
 
-
+ctmp  = espressopp.analysis.Configurations(system)
+ctmp.gather()
+print("CONFIGS: ")
+print(ctmp[0][0])
+print(ctmp[0][1])
+sys.exit(0)
 
 # Tabulated Verlet list for non-bonded interactions
 print(potentials)
@@ -261,15 +266,14 @@ angleinteractions=gromacs.setAngleInteractions(system, angletypes, angletypepara
 ##    interd = espressopp.interaction.FixedQuadrupleListTabulatedDihedral(system, fql, potTab)
 ##    system.addInteraction(interd)
 
-#DPD
-dpd=espressopp.integrator.DPDThermostat(system, vl, num_particles)
-dpd.gamma=1.0
-dpd.tgamma=0.0
-dpd.temperature = 2.4942
+# langevin thermostat
+langevin = espressopp.integrator.LangevinThermostat(system)
+langevin.gamma = 1.0
+langevin.temperature = 2.4942 # kT in gromacs units 
 integrator = espressopp.integrator.VelocityVerlet(system)
-integrator.addExtension(dpd)
+integrator.addExtension(langevin)
 integrator.dt = timestep
-system.lebcMode=0
+system.lebcMode=2
 
 # print simulation parameters
 print('')
@@ -339,17 +343,28 @@ else:
 # set the integration step  
 integrator2.dt  = timestep
 integrator2.step = 0
-integrator2.addExtension(dpd)
+integrator2.addExtension(langevin)
 # since the interaction cut-off changed the size of the cells that are used
 # to speed up verlet list builds should be adjusted accordingly 
 #system.storage.cellAdjust()
 
 first_traj = True
-os.system("mkdir -p out")
-out_energy = open("out/energy.dat", 'w')
-out_energy.write(' step T P Pxx Pyy Pzz Pxy Pxz Pyz etotal ekinetic epair ecoul ebond eangle edihedral\n')
-out_energy.write(str(0) + " " + str(T/constants.k/constants.N_A*1000) + " " +  str(P) + " " +  str(Pij[0]) + " " +  str(Pij[1]) + " " +  str(Pij[2]) + " " +  str(Pij[3]) + " " +  str(Pij[4]) + " " +  str(Pij[5]) + " " +  str(Etotal) + " " +  str(Ek) + " " +  str(Ep) + " " +  str(EQQ) + " " +  str(Eb) + " " +  str(Ea) + " " +  str(Ed) + " \n")
+#os.system("mkdir -p out")
+#out_energy = open("out/energy.dat", 'w')
+#out_energy.write(' step T P Pxx Pyy Pzz Pxy Pxz Pyz etotal ekinetic epair ecoul ebond eangle edihedral\n')
+#out_energy.write(str(0) + " " + str(T/constants.k/constants.N_A*1000) + " " +  str(P) + " " +  str(Pij[0]) + " " +  str(Pij[1]) + " " +  str(Pij[2]) + " " +  str(Pij[3]) + " " +  str(Pij[4]) + " " +  str(Pij[5]) + " " +  str(Etotal) + " " +  str(Ek) + " " +  str(Ep) + " " +  str(EQQ) + " " +  str(Eb) + " " +  str(Ea) + " " +  str(Ed) + " \n")
 
+conf  = espressopp.analysis.Configurations(system)
+conf.capacity=2
+conf.gather()
+vel = espressopp.analysis.Velocities(system)
+vel.capacity=1
+vel.gather()
+
+zbin=20
+dz=Lz/float(zbin)
+zvol=dz*Lx*Ly
+rstep=int(0.8*prod_nloops) #report after simulation run by 80%
 
 print("starting production ...")
 start_time = time.process_time()
@@ -359,6 +374,42 @@ start_time = time.process_time()
 for i in range(prod_nloops):
 
     integrator2.run(prod_isteps) # print out every steps/check steps
+    
+    conf.gather()
+    vel.gather()
+        
+    if i>=rstep:
+      # calculate z-layer profiles
+      znum=[0]*zbin
+      tempy=[.0]*zbin
+      tempz=[.0]*zbin
+      vx=[.0]*zbin
+      zrho=[.0]*zbin
+      for k in range(num_particles-256+1,num_particles+1):
+        zi=math.floor(conf[0][k][2]/dz)
+        if zi>zbin-1:
+          zi=zbin-1
+        vshear=shear_rate*(conf[0][k][2]-Lz/2.0)
+        znum[zi]+=1
+        if shear_rate > .0:
+          vx[zi]+=vel[0][k][0]+vshear
+        tempy[zi]+=vel[0][k][1]*vel[0][k][1]
+        tempz[zi]+=vel[0][k][2]*vel[0][k][2]
+      
+      for z in range(zbin):
+        if znum[z]>0:
+          tempy[z]/=float(znum[z])
+          tempz[z]/=float(znum[z])
+          if shear_rate > .0:
+            vx[z]/=float(znum[z])*shear_rate*Lz/2.0
+          zrho[z]=znum[z]/zvol/rho
+        
+        zpos=float(z+0.5)/float(zbin)
+        print("TY> %.3f %.6f" %(zpos,tempy[z]))
+        print("TZ> %.3f %.6f" %(zpos,tempz[z]))
+        print("VX> %.3f %.6f" %(zpos,vx[z]))
+        print("DENSITY> %.3f %.6f" %(zpos,zrho[z]))
+        
     T = temperature.compute()
     P = pressure.compute()
     Pij = pressureTensor.compute()
@@ -373,12 +424,12 @@ for i in range(prod_nloops):
     #for dih in dihedralinteractions.values(): Ed+=dih.computeEnergy()
     Etotal = Ek + Ep + EQQ + Eb + Ea + Ed
     sys.stdout.write(fmt % ((i+1)*(prod_isteps), T, P, Pij[3], Etotal, Ek, Ep, EQQ, Eb, Ea, Ed))
-    out_energy.write(str((i+1)*(prod_isteps)) + " " + str(T/constants.k/constants.N_A*1000) + " " +  str(P) + " " +  str(Pij[0]) + " " +  str(Pij[1]) + " " +  str(Pij[2]) + " " +  str(Pij[3]) + " " +  str(Pij[4]) + " " +  str(Pij[5]) + " " +  str(Etotal) + " " +  str(Ek) + " " +  str(Ep) + " " +  str(EQQ) + " " +  str(Eb) + " " +  str(Ea) + " " +  str(Ed) + " \n")
+    #out_energy.write(str((i+1)*(prod_isteps)) + " " + str(T/constants.k/constants.N_A*1000) + " " +  str(P) + " " +  str(Pij[0]) + " " +  str(Pij[1]) + " " +  str(Pij[2]) + " " +  str(Pij[3]) + " " +  str(Pij[4]) + " " +  str(Pij[5]) + " " +  str(Etotal) + " " +  str(Ek) + " " +  str(Ep) + " " +  str(EQQ) + " " +  str(Eb) + " " +  str(Ea) + " " +  str(Ed) + " \n")
 
     #espressopp.tools.pdb.pdbwrite("traj.pdb", system, append=True, typenames={0:'O', 1:'N', 2:'C', 3:'S', 4:'P'})
     #sys.stdout.write('\n')
-    write_gro("out/out_" + str(integrator2.step).zfill(12) + ".gro", system, 
-              ["I1","I3","I2","CT","PF"], integrator2.step * timestep)
+    #write_gro("out/out_" + str(integrator2.step).zfill(12) + ".gro", system, 
+    #          ["I1","I3","I2","CT","PF"], integrator2.step * timestep)
     
     #if i%1000 == 0:
     #    os.system("for d in out/out_*.gro; do gmx_d trjconv -f $d -o ${d%.*}.xtc -quiet yes; done")
@@ -397,7 +448,7 @@ for i in range(prod_nloops):
 #os.system("echo 0 | gmx_d trjconv -f out/traj.xtc -s start.gro -o out/traj_nojump.xtc -pbc nojump -quiet yes")
 #os.system("rm out/out_*.gro") 
 #os.system("rm out/out_*.xtc") 
-out_energy.close()
+#out_energy.close()
 # print timings and neighbor list information
 end_time = time.process_time()
 timers.show(integrator2.getTimers(), precision=4)
