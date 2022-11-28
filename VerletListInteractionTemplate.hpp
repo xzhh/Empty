@@ -119,6 +119,7 @@ inline void VerletListInteractionTemplate<_Potential>::addForces()
 
     int vlmaxtype = verletList->getMaxType();
     Potential max_pot = potentialArray.at(vlmaxtype, vlmaxtype);  // force a resize
+    int mode = system.lebcMode;
 
     // Uncomment below for analyzing shear simulations
     if (verletList->getSystemRef().ifViscosity && verletList->getSystemRef().shearOffset != .0)
@@ -133,7 +134,7 @@ inline void VerletListInteractionTemplate<_Potential>::addForces()
             Particle &p1 = *it->first;
             Particle &p2 = *it->second;
             
-            if (system.lebcMode>=0 || (system.lebcMode==-9 && p1.pib()!=p2.pib())){
+            if (mode>=0 || (mode==-9 && p1.pib()!=p2.pib())){
                 // Get minimum vector for computing stress tensor
                 Real3D dist;
                 Real3D dist_tmp(.0);
@@ -182,7 +183,7 @@ inline void VerletListInteractionTemplate<_Potential>::addForces()
             Particle &p1 = *it->first;
             Particle &p2 = *it->second;
             
-            if (system.lebcMode>=0 || (system.lebcMode==-9 && p1.pib()!=p2.pib())){
+            if (mode>=0 || (mode==-9 && p1.pib()!=p2.pib())){
                 int type1 = p1.type();
                 int type2 = p2.type();
                 const Potential &potential = potentialArray(type1, type2);
