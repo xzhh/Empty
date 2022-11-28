@@ -119,7 +119,7 @@ inline void VerletListInteractionTemplate<_Potential>::addForces()
 
     int vlmaxtype = verletList->getMaxType();
     Potential max_pot = potentialArray.at(vlmaxtype, vlmaxtype);  // force a resize
-    int mode = system.lebcMode;
+    int mode = verletList->getSystemRef().lebcMode;
 
     // Uncomment below for analyzing shear simulations
     if (verletList->getSystemRef().ifViscosity && verletList->getSystemRef().shearOffset != .0)
