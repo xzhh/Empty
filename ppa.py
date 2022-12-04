@@ -280,7 +280,7 @@ fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 #Equilibration
 print("starting equilibration (TEST) ...")
 espressopp.tools.analyse.info(system, integrator)
-for step in range(200):
+for step in range(0):
   integrator.run(50)
   espressopp.tools.analyse.info(system, integrator)
   if (math.isnan(interFENE.computeEnergy())):
@@ -337,8 +337,8 @@ if os.path.exists(filename):
 pos0=[[.0,.0,.0]]*num_chains
 pos1=[[.0,.0,.0]]*num_chains
 conf  = espressopp.analysis.Configurations(system)
-conf.capacity=2
-conf.gather()
+conf.capacity=1
+#conf.gather()
 dpl=[[.0,.0,.0]]*num_chains
 
 start_time = time.process_time()
@@ -354,10 +354,11 @@ for step in range(prod_nloops+1):
         cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
       for i in range(3):
         pos0[k][i]=conf[0][cid1][i]
-      cid2=cid1+1
-      l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
-      for i in range(3):
-        pos0[k][i]+=l[i]/2.0
+      if monomers_per_chain%2==0:
+        cid2=cid1+1
+        l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+        for i in range(3):
+          pos0[k][i]+=l[i]/2.0
     
   if step > 0:  
     integrator2.run(prod_isteps)
@@ -386,29 +387,32 @@ for step in range(prod_nloops+1):
         cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
       for i in range(3):
         pos0[k][i]=conf[0][cid1][i]
-      cid2=cid1+1
-      l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
-      for i in range(3):
-        pos0[k][i]+=l[i]/2.0
+      if monomers_per_chain%2==0:
+        cid2=cid1+1
+        l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+        for i in range(3):
+          pos0[k][i]+=l[i]/2.0
 
       l=wrap(pos1[k],pos0[k],Lx,Ly,Lz,system.shearOffset)
+      if k<10:
+        print("TEST: ",k,dpl[k],l)
       for i in range(3):
         dpl[k][i]+=l[i]
       gxx+=dpl[k][0]*dpl[k][0]
       gyy+=dpl[k][1]*dpl[k][1]
       gzz+=dpl[k][2]*dpl[k][2]
       gxz+=dpl[k][0]*dpl[k][2]
-    print("CHAIN1> ",dpl[0])
-    print("CHAIN2> ",dpl[1])
-    print("CHAIN3> ",dpl[2])
-    print("CHAIN4> ",dpl[3])
-    print("CHAIN5> ",dpl[4])
+    print("CHAIN1> ",dpl[0],pos0[0],pos1[0])
+    print("CHAIN2> ",dpl[1],pos0[1],pos1[1])
+    print("CHAIN3> ",dpl[2],pos0[2],pos1[2])
+    print("CHAIN4> ",dpl[3],pos0[3],pos1[3])
+    print("CHAIN5> ",dpl[299],pos0[299],pos1[299])
     print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt((gxx+gyy+gzz)/float(num_chains))))
     print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxx/float(num_chains))))
     print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gyy/float(num_chains))))
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gzz/float(num_chains))))
     print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(abs(gxz/float(num_chains)))))
-    
+    sys.exit(0) 
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
