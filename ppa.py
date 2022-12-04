@@ -334,12 +334,12 @@ if os.path.exists(filename):
   os.remove(filename)
 
 #Preparation (MSD)
-pos0=[[.0,.0,.0]]*num_chains
-pos1=[[.0,.0,.0]]*num_chains
+pos0=[]
+pos1=[]
 conf  = espressopp.analysis.Configurations(system)
 conf.capacity=1
 #conf.gather()
-dpl=[[.0,.0,.0]]*num_chains
+dpl=[.0]*(num_chains*3)
 
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
@@ -352,8 +352,8 @@ for step in range(prod_nloops+1):
         cid1=int(monomers_per_chain*k+(monomers_per_chain+1)/2+0.00001)
       else:
         cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
-      for i in range(3):
-        pos0[k][i]=conf[0][cid1][i]
+      pos0.append(conf[0][cid1])
+      pos1.append(conf[0][0])
       if monomers_per_chain%2==0:
         cid2=cid1+1
         l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
@@ -397,21 +397,19 @@ for step in range(prod_nloops+1):
       if k<10:
         print("TEST: ",k,dpl[k],l)
       for i in range(3):
-        dpl[k][i]+=l[i]
-      gxx+=dpl[k][0]*dpl[k][0]
-      gyy+=dpl[k][1]*dpl[k][1]
-      gzz+=dpl[k][2]*dpl[k][2]
-      gxz+=dpl[k][0]*dpl[k][2]
-    print("CHAIN1> ",dpl[0],pos0[0],pos1[0])
-    print("CHAIN2> ",dpl[1],pos0[1],pos1[1])
-    print("CHAIN3> ",dpl[2],pos0[2],pos1[2])
-    print("CHAIN4> ",dpl[3],pos0[3],pos1[3])
-    print("CHAIN5> ",dpl[299],pos0[299],pos1[299])
+        dpl[k*3+i]+=l[i]
+      gxx+=dpl[k*3+0]*dpl[k*3+0]
+      gyy+=dpl[k*3+1]*dpl[k*3+1]
+      gzz+=dpl[k*3+2]*dpl[k*3+2]
+      gxz+=dpl[k*3+0]*dpl[k*3+2]
+    print("CHAIN1> ",dpl[0:2],pos0[0],pos1[0])
+    print("CHAIN2> ",dpl[3:5],pos0[1],pos1[1])
+    print("CHAIN3> ",dpl[6:8],pos0[2],pos1[2])
     print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt((gxx+gyy+gzz)/float(num_chains))))
     print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxx/float(num_chains))))
     print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gyy/float(num_chains))))
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gzz/float(num_chains))))
-    print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(abs(gxz/float(num_chains)))))
+    print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxz/float(num_chains))))
     sys.exit(0) 
     if step%nstep_div100==0:
       r2_sum=.0
