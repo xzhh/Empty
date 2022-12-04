@@ -54,6 +54,28 @@ def vec_angle(v1, v2):
   v1_u = v1/np.linalg.norm(v1)
   v2_u = v2/np.linalg.norm(v2)
   return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))/np.pi*180.0
+  
+def wrap(a,b,Lx,Ly,Lz,offs):
+  l=[.0,.0,.0]
+  for i in range(3):
+    l[i]=b[i]-a[i]
+  if l[2]<-Lz/2.0:
+    l[2]+=Lz
+    l[0]+=system.shearOffset
+  elif l[2]>Lz/2.0:
+    l[2]-=Lz
+    l[0]-=system.shearOffset
+  if l[1]<-Ly/2.0:
+    l[1]+=Ly
+  elif l[1]>Ly/2.0:
+    l[1]-=Ly
+  if l[0]<-Lx/2.0:
+    while l[0]<-Lx/2.0:
+      l[0]+=Lx
+  elif l[0]>Lx/2.0:
+    while l[0]>Lx/2.0:
+      l[0]-=Lx
+  return l
     
 # simulation parameters (nvt = False is nve)
 rc = pow(2.0, 1.0/6.0)
@@ -62,9 +84,6 @@ ifVisc = True
 dpd = True
 ifbond = True
 skipPPA=False
-skipProf=True
-skipOri=True
-FLAG_MD=not (skipProf and skipOri)
 shear_rate = #RATE#
 timestep = 0.002
 
@@ -314,18 +333,32 @@ filename = "traj.pdb"
 if os.path.exists(filename):
   os.remove(filename)
 
-#Preparation
-if FLAG_MD:
-  pos = espressopp.analysis.Configurations(system)
-  vel = espressopp.analysis.Velocities(system)
-  bin_size=50
-  mass=1 #here assume all mass=1
-  #integrator2.run(0)
-  pos.capacity=1
-  vel.capacity=1
+#Preparation (MSD)
+pos0=[[.0,.0,.0]]*num_chains
+pos1=[[.0,.0,.0]]*num_chains
+conf  = espressopp.analysis.Configurations(system)
+conf.capacity=2
+conf.gather()
+dpl=[[.0,.0,.0]]*num_chains
 
 start_time = time.process_time()
+nstep_div100=prod_nloops/100
 for step in range(prod_nloops+1):
+  if step == 0:
+    conf.gather()
+    #define the original pos of central monomer
+    for k in range(num_chains):
+      if monomers_per_chain%2==1:
+        cid1=monomers_per_chain*k+(monomers_per_chain+1)/2
+      else:
+        cid1=monomers_per_chain*k+monomers_per_chain/2
+      for i in range(1,3):
+        pos0[k][i]=conf[0][cid1][i]
+      cid2=cid1+1
+      l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+      for i in range(1,3):
+        pos0[k][i]+=l[i]/2.0
+    
   if step > 0:  
     integrator2.run(prod_isteps)
     espressopp.tools.analyse.info(system, integrator2)
@@ -336,108 +369,83 @@ for step in range(prod_nloops+1):
       sys.exit(0)
     #espressopp.tools.pdb.pdbwrite(filename, system, append=True)
     #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
-  
-  if FLAG_MD:
-    #fetch coordinates and velocities
-    pos.gather()
-    vel.gather()
-    #get no. of the current step
-    currentStep=step*prod_isteps
-    #Init
-    if not skipProf:
-      cnt=[0]*bin_size
-      vx =[0]*bin_size
-      vz =[0]*bin_size
-      sx =[0]*bin_size
-      ty =[0]*bin_size
-      tz =[0]*bin_size
-    mo=[.0,.0,.0,.0]
-    #ori=[[.0,.0,.0]]*num_chains
-    for j in range(1,num_particles+1):
-      #print "IDX>",j
-      # define shear speed of the current particle
-      spdShear=shear_rate*(pos[0][j][2]-Lz/2.0)
-      
-      #momentum
-      mo[0]+=vel[0][j][0]
-      mo[1]+=vel[0][j][1]
-      mo[2]+=vel[0][j][2]
-      mo[3]+=vel[0][j][0]+spdShear
-      
-      #profile
-      if not skipProf:
-        bid=int(pos[0][j][2]/Lz*bin_size)
-        if bid<0:
-          bid=0
-        elif bid>=bin_size:
-          bid=bin_size-1
-        #collect profile info by layers along gradient-dir
-        cnt[bid]+=1;
-        vx[bid]+=vel[0][j][0]
-        vz[bid]+=vel[0][j][2]
-        sx[bid]+=vel[0][j][0]+spdShear
-        ty[bid]+=vel[0][j][1]*vel[0][j][1]*mass/1.0
-        tz[bid]+=vel[0][j][2]*vel[0][j][2]*mass/1.0
-      
-      #collect end-to-end orientation (normailized)
-      if not skipOri:
-        print("Current Orientation is wrong(shearOffset)")
-        sys.exit(0)
-        mono_idx=(j-1)%monomers_per_chain
-        chain_idx=(j-1-mono_idx)/monomers_per_chain
-        if chain_idx<nc_print:
-          if mono_idx==0:
-            ori=Real3D(.0,.0,.0)
-            dim=[0,0,0]
-            ori-=pos[0][j]
-          else:
-            l=pos[0][j]-pos[0][j-1]
-            if l[0]<-Lx/2.0:
-              dim[0]+=1
-            elif l[0]>Lx/2.0:
-              dim[0]-=1
-            if l[1]<-Ly/2.0:
-              dim[1]+=1
-            elif l[1]>Ly/2.0:
-              dim[1]-=1
-            if l[2]<-Lz/2.0:
-              dim[2]+=1
-            elif l[2]>Lz/2.0:
-              dim[2]-=1
-            if mono_idx==monomers_per_chain-1:
-              ori+=pos[0][j]
-              ori+=Real3D(dim[0]*Lx,dim[1]*Ly,dim[2]*Lz)
-              ori_abs=ori.abs()
-              print("CHAIN-%0d> %10d %.6f %.6f %.6f" %(chain_idx,currentStep,ori[0]/ori_abs,ori[1]/ori_abs,ori[2]/ori_abs))
-              del ori
-              #gc.collect()
     
-    #print data
-    print("MOMENTUM> %10d %.6f %.6f %.6f %.6f" %(currentStep,mo[0]/num_particles,mo[1]/num_particles,mo[2]/num_particles,mo[3]/num_particles))
-    if not skipProf:
-      for j in range(bin_size):
-        #print "COUNT>",cnt[j]
-        zb=(j+0.5)/bin_size
-        if cnt[j]>0:
-          print("DISTR> %10d %.3f %.6f" %(currentStep,zb,cnt[j]/num_particles*bin_size))
-          print("VX> %10d %.3f %.6f" %(currentStep,zb,vx[j]/cnt[j]))
-          print("VZ> %10d %.3f %.6f" %(currentStep,zb,vz[j]/cnt[j]))
-          if shear_rate>.0:
-            print("VSHEAR> %10d %.3f %.6f" %(currentStep,zb,sx[j]/cnt[j]/(shear_rate*Lz/2.0)))
-          print("TY> %10d %.3f %.6f" %(currentStep,zb,ty[j]/cnt[j]))
-          print("TZ> %10d %.3f %.6f" %(currentStep,zb,tz[j]/cnt[j]))
+    conf.gather()
+    # calculate MSD for central monomers
+    gxx=0.0
+    gyy=0.0
+    gzz=0.0
+    gxz=0.0
+    for k in range(num_chains):
+      for i in range(1,3):
+        pos1[k][i]=pos0[k][i]
+
+      if monomers_per_chain%2==1:
+        cid1=monomers_per_chain*k+(monomers_per_chain+1)/2
+      else:
+        cid1=monomers_per_chain*k+monomers_per_chain/2
+      for i in range(1,3):
+        pos0[k][i]=conf[0][cid1][i]
+      cid2=cid1+1
+      l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+      for i in range(1,3):
+        pos0[k][i]+=l[i]/2.0
+
+      l=wrap(pos1[k][i],pos0[k][i],Lx,Ly,Lz,system.shearOffset)
+      for i in range(1,3):
+        dpl[k][i]+=l[i]
+      gxx+=dpl[k][0]*dpl[k][0]
+      gyy+=dpl[k][1]*dpl[k][1]
+      gzz+=dpl[k][2]*dpl[k][2]
+      gxz+=dpl[k][0]*dpl[k][2]
+    print("MSD> %.3f %.6f" %(step*dt*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
+    print("GXX> %.3f %.6f" %(step*dt*prod_isteps,gxx/float(num_chains)))
+    print("GYY> %.3f %.6f" %(step*dt*prod_isteps,gyy/float(num_chains)))
+    print("GZZ> %.3f %.6f" %(step*dt*prod_isteps,gzz/float(num_chains)))
+    print("GXZ> %.3f %.6f" %(step*dt*prod_isteps,gxz/float(num_chains)))
+    
+    if step%nstep_div100==0:
+      r2_sum=.0
+      for i in range(num_chains):
+        dim=[0,0,0]
+        jj=monomers_per_chain*i+1
+      
+        for j in range(1,monomers_per_chain):
+          jj=monomers_per_chain*i+j
+          l=conf[0][jj+1]-conf[0][jj]
+          if l[2]<-Lz/2.0:
+            dim[2]+=1
+            l[2]+=Lz
+            l[0]+=system.shearOffset
+          elif l[2]>Lz/2.0:
+            dim[2]-=1
+            l[2]-=Lz
+            l[0]-=system.shearOffset
+          if l[1]<-Ly/2.0:
+            dim[1]+=1
+            l[1]+=Ly
+          elif l[1]>Ly/2.0:
+            dim[1]-=1
+            l[1]-=Ly
+          if l[0]<-Lx/2.0:
+             while l[0]<-Lx/2.0:
+              dim[0]+=1
+              l[0]+=Lx
+          elif l[0]>Lx/2.0:
+            while l[0]>Lx/2.0:
+              dim[0]-=1
+              l[0]-=Lx
         
-    #release memory
-      del cnt
-      del vx 
-      del vz 
-      del sx 
-      del ty 
-      del tz 
-    del mo 
-    #gc.collect()
-    #pos.clear()
-    #vel.clear()
+        rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
+        rtmp[2]+=float(dim[2])*Lz
+        rtmp[0]+=float(dim[2])*system.shearOffset
+        rtmp[1]+=float(dim[1])*Ly
+        rtmp[0]+=float(dim[0])*Lx
+        r2_sum+=rtmp.abs()**2
+        rlen.append(rtmp.abs())
+      r2_msq=r2_sum/num_chains
+      print("R_ETE> ",math.sqrt(r2_msq))
+
 
 end_time = time.process_time()
 print("production finished")
