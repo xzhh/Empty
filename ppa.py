@@ -398,7 +398,11 @@ for step in range(prod_nloops+1):
       gyy+=dpl[k][1]*dpl[k][1]
       gzz+=dpl[k][2]*dpl[k][2]
       gxz+=dpl[k][0]*dpl[k][2]
-    print("XYZ> ",pos0[num_chains-1],"-",pos1[num_chains-1],"-",l)
+    print("CHAIN1> ",dpl[0])
+    print("CHAIN2> ",dpl[1])
+    print("CHAIN3> ",dpl[2])
+    print("CHAIN4> ",dpl[3])
+    print("CHAIN5> ",dpl[4])
     print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt((gxx+gyy+gzz)/float(num_chains))))
     print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxx/float(num_chains))))
     print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gyy/float(num_chains))))
