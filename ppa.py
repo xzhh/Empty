@@ -394,8 +394,7 @@ for step in range(prod_nloops+1):
           pos0[k][i]+=l[i]/2.0
 
       l=wrap(pos1[k],pos0[k],Lx,Ly,Lz,system.shearOffset)
-      if k<10:
-        print("TEST: ",k,dpl[k],l)
+      
       for i in range(3):
         dpl[k*3+i]+=l[i]
       gxx+=dpl[k*3+0]*dpl[k*3+0]
@@ -405,11 +404,11 @@ for step in range(prod_nloops+1):
     print("CHAIN1> ",dpl[0:2],pos0[0],pos1[0])
     print("CHAIN2> ",dpl[3:5],pos0[1],pos1[1])
     print("CHAIN3> ",dpl[6:8],pos0[2],pos1[2])
-    print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt((gxx+gyy+gzz)/float(num_chains))))
-    print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxx/float(num_chains))))
-    print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gyy/float(num_chains))))
-    print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gzz/float(num_chains))))
-    print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,math.sqrt(gxz/float(num_chains))))
+    print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
+    print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,gxx/float(num_chains)))
+    print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,gyy/float(num_chains)))
+    print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
+    print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
     sys.exit(0) 
     if step%nstep_div100==0:
       r2_sum=.0
