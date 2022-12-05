@@ -84,7 +84,7 @@ ifVisc = True
 dpd = True
 ifbond = True
 skipPPA=False
-shear_rate = 0.0
+shear_rate = 0.01
 timestep = 0.002
 
 # set parameters for simulations
@@ -280,7 +280,7 @@ fmt = '%5d %8.4f %10.5f %8.5f %12.3f %12.3f %12.3f %12.3f %12.3f\n'
 #Equilibration
 print("starting equilibration (TEST) ...")
 espressopp.tools.analyse.info(system, integrator)
-for step in range(0):
+for step in range(200):
   integrator.run(50)
   espressopp.tools.analyse.info(system, integrator)
   if (math.isnan(interFENE.computeEnergy())):
@@ -401,15 +401,12 @@ for step in range(prod_nloops+1):
       gyy+=dpl[k*3+1]*dpl[k*3+1]
       gzz+=dpl[k*3+2]*dpl[k*3+2]
       gxz+=dpl[k*3+0]*dpl[k*3+2]
-    print("CHAIN1> ",dpl[0:2],pos0[0],pos1[0])
-    print("CHAIN2> ",dpl[3:5],pos0[1],pos1[1])
-    print("CHAIN3> ",dpl[6:8],pos0[2],pos1[2])
     print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
     print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,gxx/float(num_chains)))
     print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,gyy/float(num_chains)))
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
     print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
-    sys.exit(0) 
+    
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
@@ -452,9 +449,14 @@ for step in range(prod_nloops+1):
       print("R_ETE> ",math.sqrt(r2_msq))
       sys.exit(0)
 
-
 end_time = time.process_time()
 print("production finished")
+
+#delete
+del pos0
+del pos1
+del conf
+del dpl
 
 if (ifbond):
   T = temperature.compute()
