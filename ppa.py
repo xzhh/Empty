@@ -61,10 +61,10 @@ def wrap(a,b,Lx,Ly,Lz,offs):
     l[i]=b[i]-a[i]
   if l[2]<-Lz/2.0:
     l[2]+=Lz
-    l[0]+=system.shearOffset
+    l[0]+=offs
   elif l[2]>Lz/2.0:
     l[2]-=Lz
-    l[0]-=system.shearOffset
+    l[0]-=offs
   if l[1]<-Ly/2.0:
     l[1]+=Ly
   elif l[1]>Ly/2.0:
@@ -76,6 +76,42 @@ def wrap(a,b,Lx,Ly,Lz,offs):
     while l[0]>Lx/2.0:
       l[0]-=Lx
   return l
+
+def getCOM(x,n1,n,Lx,Ly,Lz,offs):
+  xcom=[x[n1][0],x[n1][1],x[n1][2]]
+  p0=[x[n1][0],x[n1][1],x[n1][2]]
+  for k in range(n1+1,(n1+n)):
+	p1=[x[k][0],x[k][1],x[k][2]]
+	
+    l=[.0,.0,.0]
+    for i in range(3):
+      l[i]=p1[i]-p0[i]
+    if l[2]<-Lz/2.0:
+      while l[2]<-Lz/2.0:
+        l[2]+=Lz
+        l[0]+=offs
+    elif l[2]>Lz/2.0:
+      while l[2]>Lz/2.0:
+        l[2]-=Lz
+        l[0]-=offs
+    if l[1]<-Ly/2.0:
+      while l[1]<-Ly/2.0:
+        l[1]+=Ly
+    elif l[1]>Ly/2.0:
+      while l[1]>Ly/2.0:
+        l[1]-=Ly
+    if l[0]<-Lx/2.0:
+      while l[0]<-Lx/2.0:
+        l[0]+=Lx
+    elif l[0]>Lx/2.0:
+      while l[0]>Lx/2.0:
+        l[0]-=Lx
+    for i in range(3):
+      p0[i]+=l[i]
+      xcom[i]+=p0[i]
+  for i in range(3):
+	xcom[i]/=float(n)
+  
     
 # simulation parameters (nvt = False is nve)
 rc = pow(2.0, 1.0/6.0)
@@ -417,23 +453,27 @@ for step in range(prod_nloops+1):
           jj=monomers_per_chain*i+j
           l=conf[0][jj+1]-conf[0][jj]
           if l[2]<-Lz/2.0:
-            dim[2]+=1
-            l[2]+=Lz
-            l[0]+=system.shearOffset
+            while l[2]<-Lz/2.0:
+              dim[2]+=1
+              l[2]+=Lz
+              l[0]+=system.shearOffset
           elif l[2]>Lz/2.0:
-            dim[2]-=1
-            l[2]-=Lz
-            l[0]-=system.shearOffset
+            while l[2]>Lz/2.0:
+              dim[2]-=1
+              l[2]-=Lz
+              l[0]-=system.shearOffset
           if l[1]<-Ly/2.0:
-            dim[1]+=1
-            l[1]+=Ly
+            while l[1]<-Ly/2.0:
+              dim[1]+=1
+              l[1]+=Ly
           elif l[1]>Ly/2.0:
-            dim[1]-=1
-            l[1]-=Ly
+            while l[1]>Ly/2.0:
+              dim[1]-=1
+              l[1]-=Ly
           if l[0]<-Lx/2.0:
-             while l[0]<-Lx/2.0:
-              dim[0]+=1
-              l[0]+=Lx
+            while l[0]<-Lx/2.0:
+             dim[0]+=1
+             l[0]+=Lx
           elif l[0]>Lx/2.0:
             while l[0]>Lx/2.0:
               dim[0]-=1
@@ -598,21 +638,25 @@ if not skipPPA:
       jj=monomers_per_chain*i+j
       l=conf[0][jj+1]-conf[0][jj]
       if l[2]<-Lz/2.0:
-        dim[2]+=1
-        l[2]+=Lz
-        l[0]+=system.shearOffset
+        while l[2]<-Lz/2.0:
+          dim[2]+=1
+          l[2]+=Lz
+          l[0]+=system.shearOffset
       elif l[2]>Lz/2.0:
-        dim[2]-=1
-        l[2]-=Lz
-        l[0]-=system.shearOffset
+        while l[2]>Lz/2.0:
+          dim[2]-=1
+          l[2]-=Lz
+          l[0]-=system.shearOffset
       if l[1]<-Ly/2.0:
-        dim[1]+=1
-        l[1]+=Ly
+        while l[1]<-Ly/2.0:
+          dim[1]+=1
+          l[1]+=Ly
       elif l[1]>Ly/2.0:
-        dim[1]-=1
-        l[1]-=Ly
+        while l[1]>Ly/2.0:
+          dim[1]-=1
+          l[1]-=Ly
       if l[0]<-Lx/2.0:
-         while l[0]<-Lx/2.0:
+        while l[0]<-Lx/2.0:
           dim[0]+=1
           l[0]+=Lx
       elif l[0]>Lx/2.0:
