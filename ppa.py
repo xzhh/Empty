@@ -112,6 +112,8 @@ def getCOM(x,n1,n,Lx,Ly,Lz,offs):
   for i in range(3):
 	xcom[i]/=float(n)
   
+  return xcom
+  
     
 # simulation parameters (nvt = False is nve)
 rc = pow(2.0, 1.0/6.0)
@@ -370,8 +372,10 @@ if os.path.exists(filename):
   os.remove(filename)
 
 #Preparation (MSD)
-pos0=[]
-pos1=[]
+pos_cur=[] #mid point of chain
+pos_sav=[]
+pcm_sav=[] #com of chain
+del_t=timestep*float(prod_isteps)
 conf  = espressopp.analysis.Configurations(system)
 conf.capacity=1
 #conf.gather()
@@ -382,19 +386,22 @@ nstep_div100=prod_nloops/100
 for step in range(prod_nloops+1):
   if step == 0:
     conf.gather()
-    #define the original pos of central monomer
     for k in range(num_chains):
+      #determine the xyz of central monomer
       if monomers_per_chain%2==1:
         cid1=int(monomers_per_chain*k+(monomers_per_chain+1)/2+0.00001)
       else:
         cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
-      pos0.append(conf[0][cid1])
-      pos1.append(conf[0][0])
+      pos_cur.append(conf[0][cid1])
+      pos_sav.append(conf[0][0])
       if monomers_per_chain%2==0:
         cid2=cid1+1
         l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
         for i in range(3):
-          pos0[k][i]+=l[i]/2.0
+          pos_cur[k][i]+=l[i]/2.0
+      ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
+      #determine the xyz of CoM
+      pcm_sav.append([ptmp[0],ptmp[1],ptmp[2]])
     
   if step > 0:  
     integrator2.run(prod_isteps)
@@ -415,24 +422,31 @@ for step in range(prod_nloops+1):
     gxz=0.0
     for k in range(num_chains):
       for i in range(3):
-        pos1[k][i]=pos0[k][i]
+        pos_sav[k][i]=pos_cur[k][i]
 
       if monomers_per_chain%2==1:
         cid1=int(monomers_per_chain*k+(monomers_per_chain+1)/2+0.00001)
       else:
         cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
       for i in range(3):
-        pos0[k][i]=conf[0][cid1][i]
+        pos_cur[k][i]=conf[0][cid1][i]
       if monomers_per_chain%2==0:
         cid2=cid1+1
         l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
         for i in range(3):
-          pos0[k][i]+=l[i]/2.0
-
-      l=wrap(pos1[k],pos0[k],Lx,Ly,Lz,system.shearOffset)
-      
+          pos_cur[k][i]+=l[i]/2.0
+      #caculate the displacement of central monomers for prod_isteps
+      l=wrap(pos_sav[k],pos_cur[k],Lx,Ly,Lz,system.shearOffset)
       for i in range(3):
         dpl[k*3+i]+=l[i]
+      #determine CoM for the current step (in the same image space at t'=t-dt)
+      ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
+      l=wrap(pcm_sav[k],ptmp,Lx,Ly,Lz,system.shearOffset)
+      for i in range(3):
+        ptmp[i]=pcm_sav[k][i]+l[i]
+      #calculate mean-square displacement in x (excluding shear contribution)
+      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+l[2]*float(step-1))
+      
       gxx+=dpl[k*3+0]*dpl[k*3+0]
       gyy+=dpl[k*3+1]*dpl[k*3+1]
       gzz+=dpl[k*3+2]*dpl[k*3+2]
@@ -493,8 +507,9 @@ end_time = time.process_time()
 print("production finished")
 
 #delete
-del pos0
-del pos1
+del pos_cur
+del pos_sav
+del pcm_sav
 del conf
 del dpl
 
