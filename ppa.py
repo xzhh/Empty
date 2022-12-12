@@ -39,7 +39,7 @@ from espressopp import Real3D, Int3D
 from espressopp.tools import lammps, gromacs
 from espressopp.tools import decomp, timers, replicate
 import os
-#import gc
+import gc
 
 def vec_angle(v1, v2):
   """ Returns the angle in radians between vectors 'v1' and 'v2'::
@@ -60,15 +60,19 @@ def wrap(a,b,Lx,Ly,Lz,offs):
   for i in range(3):
     l[i]=b[i]-a[i]
   if l[2]<-Lz/2.0:
-    l[2]+=Lz
-    l[0]+=offs
+    while l[2]<-Lz/2.0:
+      l[2]+=Lz
+      l[0]+=offs
   elif l[2]>Lz/2.0:
-    l[2]-=Lz
-    l[0]-=offs
+    while l[2]>Lz/2.0:
+      l[2]-=Lz
+      l[0]-=offs
   if l[1]<-Ly/2.0:
-    l[1]+=Ly
+    while l[1]<-Ly/2.0:
+      l[1]+=Ly
   elif l[1]>Ly/2.0:
-    l[1]-=Ly
+    while l[1]>Ly/2.0:
+      l[1]-=Ly
   if l[0]<-Lx/2.0:
     while l[0]<-Lx/2.0:
       l[0]+=Lx
@@ -80,9 +84,9 @@ def wrap(a,b,Lx,Ly,Lz,offs):
 def getCOM(x,n1,n,Lx,Ly,Lz,offs):
   xcom=[x[n1][0],x[n1][1],x[n1][2]]
   p0=[x[n1][0],x[n1][1],x[n1][2]]
+
   for k in range(n1+1,(n1+n)):
-	p1=[x[k][0],x[k][1],x[k][2]]
-	
+    p1=[x[k][0],x[k][1],x[k][2]]
     l=[.0,.0,.0]
     for i in range(3):
       l[i]=p1[i]-p0[i]
@@ -109,12 +113,11 @@ def getCOM(x,n1,n,Lx,Ly,Lz,offs):
     for i in range(3):
       p0[i]+=l[i]
       xcom[i]+=p0[i]
+
   for i in range(3):
-	xcom[i]/=float(n)
-  
+        xcom[i]/=float(n)
   return xcom
-  
-    
+
 # simulation parameters (nvt = False is nve)
 rc = pow(2.0, 1.0/6.0)
 skin = 0.3
@@ -122,7 +125,7 @@ ifVisc = True
 dpd = True
 ifbond = True
 skipPPA=False
-shear_rate = 0.01
+shear_rate = 0.1
 timestep = 0.002
 
 # set parameters for simulations
@@ -157,7 +160,7 @@ random.seed( ((tseed & 0xff000000) >> 24) +
              ((tseed & 0x0000ff00) <<  8) +
              ((tseed & 0x000000ff) << 24)   )
 irand=random.randint(1,99999)
-
+#irand=12345
 system = espressopp.System()
 system.rng = espressopp.esutil.RNG()
 system.rng.seed(irand)
@@ -375,11 +378,14 @@ if os.path.exists(filename):
 pos_cur=[] #mid point of chain
 pos_sav=[]
 pcm_sav=[] #com of chain
+pcm_t0=[]
 del_t=timestep*float(prod_isteps)
+print("DELTA_T: ",del_t)
 conf  = espressopp.analysis.Configurations(system)
 conf.capacity=1
 #conf.gather()
 dpl=[.0]*(num_chains*3)
+d_stream=[.0]*num_chains
 
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
@@ -399,10 +405,16 @@ for step in range(prod_nloops+1):
         l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
         for i in range(3):
           pos_cur[k][i]+=l[i]/2.0
-      ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
       #determine the xyz of CoM
-      pcm_sav.append([ptmp[0],ptmp[1],ptmp[2]])
-    
+      ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
+      l=wrap(pos_cur[k],ptmp,Lx,Ly,Lz,system.shearOffset)
+      pcm_sav.append([pos_cur[k][0]+l[0],pos_cur[k][1]+l[1],pos_cur[k][2]+l[2]])
+      pcm_t0.append([pcm_sav[k][0],pcm_sav[k][1],pcm_sav[k][2]])
+      #print("CHAIN %d STEP %d [%.4f %.4f %.4f] (%.4f %.4f %.4f) / %.4f %.4f" %(k,step,pos_cur[k][0],pos_cur[k][1],pos_cur[k][2],pos_cur[k][0]+l[0],pos_cur[k][1]+l[1],pos_cur[k][2]+l[2],dpl[k*3+0],0.0))
+#      print(pcm_sav[1],system.storage.getParticle(30).pos)
+      del ptmp
+      del l
+
   if step > 0:  
     integrator2.run(prod_isteps)
     espressopp.tools.analyse.info(system, integrator2)
@@ -415,11 +427,12 @@ for step in range(prod_nloops+1):
     #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
     
     conf.gather()
-    # calculate MSD for central monomers
+    # calculate MSD for central monomers (initialize)
     gxx=0.0
     gyy=0.0
     gzz=0.0
     gxz=0.0
+    #d_stream=[]
     for k in range(num_chains):
       for i in range(3):
         pos_sav[k][i]=pos_cur[k][i]
@@ -439,24 +452,34 @@ for step in range(prod_nloops+1):
       l=wrap(pos_sav[k],pos_cur[k],Lx,Ly,Lz,system.shearOffset)
       for i in range(3):
         dpl[k*3+i]+=l[i]
+        pos_cur[k][i]=pos_sav[k][i]+l[i]
       #determine CoM for the current step (in the same image space at t'=t-dt)
       ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
-      l=wrap(pcm_sav[k],ptmp,Lx,Ly,Lz,system.shearOffset)
+      lcm=wrap(pcm_sav[k],ptmp,Lx,Ly,Lz,system.shearOffset)
       for i in range(3):
-        ptmp[i]=pcm_sav[k][i]+l[i]
-      #calculate mean-square displacement in x (excluding shear contribution)
-      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+l[2]*float(step-1))
-      
-      gxx+=dpl[k*3+0]*dpl[k*3+0]
+        ptmp[i]=pcm_sav[k][i]+lcm[i]
+      #calculate shear contribution in x propagation
+      d_stream[k]+=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
+      #print("CHAIN %d STEP %d [%.4f %.4f %.4f] (%.4f %.4f %.4f) / %.4f %.4f" %(k,step,pos_cur[k][0],pos_cur[k][1],pos_cur[k][2],ptmp[0],ptmp[1],ptmp[2],dpl[k*3+0],d_stream[k]))
+#      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
+#      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*float(step-1))
+      for i in range(3): pcm_sav[k][i]=ptmp[i]
+      del l
+      del lcm
+      del ptmp
+
+      xtmp=dpl[k*3+0]-d_stream[k]
+      gxx+=xtmp*xtmp
       gyy+=dpl[k*3+1]*dpl[k*3+1]
       gzz+=dpl[k*3+2]*dpl[k*3+2]
-      gxz+=dpl[k*3+0]*dpl[k*3+2]
+      gxz+=xtmp*dpl[k*3+2]
     print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
+#    print("G00> %.3f %.6f" %(step*timestep*prod_isteps,d0*d0))
     print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,gxx/float(num_chains)))
     print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,gyy/float(num_chains)))
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
     print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
-    
+#    sys.exit(0)
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
@@ -501,17 +524,18 @@ for step in range(prod_nloops+1):
         r2_sum+=rtmp.abs()**2
       r2_msq=r2_sum/num_chains
       print("R_ETE> ",math.sqrt(r2_msq))
-      sys.exit(0)
-
+      #sys.exit(0)
+#  gc.collect()
 end_time = time.process_time()
 print("production finished")
-
+sys.exit(0)
 #delete
 del pos_cur
 del pos_sav
 del pcm_sav
 del conf
 del dpl
+#gc.collect()
 
 if (ifbond):
   T = temperature.compute()
