@@ -81,12 +81,12 @@ def wrap(a,b,Lx,Ly,Lz,offs):
       l[0]-=Lx
   return l
 
-def getCOM(x,n1,n,Lx,Ly,Lz,offs):
-  xcom=[x[n1][0],x[n1][1],x[n1][2]]
-  p0=[x[n1][0],x[n1][1],x[n1][2]]
+def getCOM(s,n1,n,Lx,Ly,Lz,offs):
+  xcom=s.getParticle(n1).pos
+  p0=s.getParticle(1).pos
 
   for k in range(n1+1,(n1+n)):
-    p1=[x[k][0],x[k][1],x[k][2]]
+    p1=s.getParticle(k).pos
     l=[.0,.0,.0]
     for i in range(3):
       l[i]=p1[i]-p0[i]
