@@ -525,6 +525,7 @@ for step in range(prod_nloops+1):
       r2_msq=r2_sum/num_chains
       print("R_ETE> ",math.sqrt(r2_msq))
       #sys.exit(0)
+  conf.clear()
 #  gc.collect()
 end_time = time.process_time()
 print("production finished")
