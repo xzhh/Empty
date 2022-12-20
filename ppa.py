@@ -386,6 +386,9 @@ conf.capacity=1
 #conf.gather()
 dpl=[.0]*(num_chains*3)
 d_stream=[.0]*num_chains
+dtr_xx=[.0]*30
+dtr_cnt=[0]*30
+dtr_bsize=shear_rate*timestep*float(prod_isteps*prod_nloops)*Lz/20.0
 
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
@@ -469,6 +472,12 @@ for step in range(prod_nloops+1):
       del ptmp
 
       xtmp=dpl[k*3+0]-d_stream[k]
+      #check equi-distribution of GXX at diff stream layers
+      if step==prod_nloops:
+        bi=int(abs(d_stream[k])/dtr_bsize)
+        if bi<30:
+          dtr_xx[bi]+=xtmp*xtmp
+          dtr_cnt[bi]+=1
       gxx+=xtmp*xtmp
       gyy+=dpl[k*3+1]*dpl[k*3+1]
       gzz+=dpl[k*3+2]*dpl[k*3+2]
@@ -480,6 +489,9 @@ for step in range(prod_nloops+1):
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
     print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
 #    sys.exit(0)
+    if step==prod_nloops:
+      for i in range(30):
+        print("STREAM> %.2f  %.2f" %(float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i])))
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
