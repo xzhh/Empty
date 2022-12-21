@@ -138,7 +138,7 @@ nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
 
 # number of prod loops
-prod_nloops       = 2000 #200
+prod_nloops       = 50000 #200
 # number of integration steps performed in each production loop
 prod_isteps       = 50
 msid_nloops = prod_nloops/4
@@ -389,7 +389,7 @@ dtr_bin=30
 dtr_xx=[.0]*dtr_bin
 dtr_cnt=[0]*dtr_bin
 dtr_bwitdh=shear_rate*timestep*float(prod_isteps)*Lz/20.0
-
+print("BWITDH: ",dtr_bwitdh)
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
 for step in range(prod_nloops+1):
@@ -475,7 +475,7 @@ for step in range(prod_nloops+1):
       #check equi-distribution of GXX at diff stream layers
 #      if step==prod_nloops:
       if step%nstep_div100==0:
-        bi=int(abs(d_stream[k])/dtr_bwitdh*float(step))
+        bi=int(abs(d_stream[k])/dtr_bwitdh/float(step))
         if bi<dtr_bin:
           dtr_xx[bi]+=xtmp*xtmp
           dtr_cnt[bi]+=1
@@ -497,6 +497,9 @@ for step in range(prod_nloops+1):
           print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i]),dtr_cnt[i]))
         else:
           print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),.0,0))
+        dtr_xx[i]=.0
+        dtr_cnt[i]=0
+#      sys.exit(0)
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
@@ -645,13 +648,15 @@ if not skipPPA:
   system.storage.decompose()
   
   file2="traj_ppa.pdb"
+  espressopp.tools.pdb.pdbwrite(file2, system, append=False)
   for step in range(20):
     integrator.run(50)
     espressopp.tools.analyse.info(system, integrator)
     if (math.isnan(interFENE.computeEnergy())):
       print("FENE becomes NaN during production")
       sys.exit(0)
-    #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
+    if step%2==1:
+      espressopp.tools.pdb.pdbwrite(file2, system, append=True)
     #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
     
   thermostat.gamma=0.5 
@@ -661,7 +666,8 @@ if not skipPPA:
     if (math.isnan(interFENE.computeEnergy())):
       print("FENE becomes NaN during production")
       sys.exit(0)
-  espressopp.tools.pdb.pdbwrite(file2, system, append=False)
+    if step%5==4:
+      espressopp.tools.pdb.pdbwrite(file2, system, append=True)
     #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
   
   # post-analysis
