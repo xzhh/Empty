@@ -138,7 +138,7 @@ nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
 
 # number of prod loops
-prod_nloops       = 50 #200
+prod_nloops       = 2000 #200
 # number of integration steps performed in each production loop
 prod_isteps       = 50
 msid_nloops = prod_nloops/4
@@ -385,9 +385,10 @@ conf.capacity=1
 #conf.gather()
 dpl=[.0]*(num_chains*3)
 d_stream=[.0]*num_chains
-dtr_xx=[.0]*30
-dtr_cnt=[0]*30
-dtr_bsize=shear_rate*timestep*float(prod_isteps*prod_nloops)*Lz/20.0
+dtr_bin=30
+dtr_xx=[.0]*dtr_bin
+dtr_cnt=[0]*dtr_bin
+dtr_bwitdh=shear_rate*timestep*float(prod_isteps)*Lz/20.0
 
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
@@ -472,9 +473,10 @@ for step in range(prod_nloops+1):
 
       xtmp=dpl[k*3+0]-d_stream[k]
       #check equi-distribution of GXX at diff stream layers
-      if step==prod_nloops:
-        bi=int(abs(d_stream[k])/dtr_bsize)
-        if bi<30:
+#      if step==prod_nloops:
+      if step%nstep_div100==0:
+        bi=int(abs(d_stream[k])/dtr_bwitdh*float(step))
+        if bi<dtr_bin:
           dtr_xx[bi]+=xtmp*xtmp
           dtr_cnt[bi]+=1
       gxx+=xtmp*xtmp
@@ -488,12 +490,13 @@ for step in range(prod_nloops+1):
     print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
     print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
 #    sys.exit(0)
-    if step==prod_nloops:
-      for i in range(30):
+#    if step==prod_nloops:
+    if step%nstep_div100==0:
+      for i in range(dtr_bin):
         if dtr_cnt[i]>0:  
-          print("STREAM> %.2f  %.2f %d" %(float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i]),dtr_cnt[i]))
+          print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i]),dtr_cnt[i]))
         else:
-          print("STREAM> %.2f  %.2f %d" %(float((i+0.5)*0.1),.0,0))
+          print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),.0,0))
     if step%nstep_div100==0:
       r2_sum=.0
       for i in range(num_chains):
@@ -537,13 +540,13 @@ for step in range(prod_nloops+1):
         rtmp[0]+=float(dim[0])*Lx
         r2_sum+=rtmp.abs()**2
       r2_msq=r2_sum/num_chains
-      print("R_ETE> ",math.sqrt(r2_msq))
+      print("R_ETE> %d %.2f" %(step,math.sqrt(r2_msq)))
       #sys.exit(0)
   conf.clear()
 #  gc.collect()
 end_time = time.process_time()
 print("production finished")
-sys.exit(0)
+
 #delete
 del pos_cur
 del pos_sav
@@ -592,16 +595,11 @@ if not skipPPA:
   # the equilibration uses a different interaction cutoff therefore the current
   # verlet list is not needed any more and would waste only CPU time
   
-  exlist=[]
-  for nc in range(num_chains):
-    for i in range(nc*monomers_per_chain+1,(nc+1)*monomers_per_chain):
-      for j in range(i+1,(nc+1)*monomers_per_chain+1):
-        exlist.append((i,j))
-  vl.exclude(exlist)
   potLJ = espressopp.interaction.LennardJones(1.0, 1.0, cutoff = rc, shift = "auto")
   interLJ = espressopp.interaction.VerletListLennardJones(vl)
   interLJ.setPotential(type1 = 0, type2 = 0, potential = potLJ)
   system.addInteraction(interLJ)
+  system.lebcMode = -9
   
   if (ifbond):
     #potFENE = espressopp.interaction.Harmonic(K=30.0, r0=0.0)
@@ -663,7 +661,7 @@ if not skipPPA:
     if (math.isnan(interFENE.computeEnergy())):
       print("FENE becomes NaN during production")
       sys.exit(0)
-    #espressopp.tools.pdb.pdbwrite(file2, system, append=True)
+  espressopp.tools.pdb.pdbwrite(file2, system, append=False)
     #espressopp.tools.xyzfilewrite(file2, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
   
   # post-analysis
