@@ -138,7 +138,7 @@ nc_print = max(100,3*monomers_per_chain) #num_chains
 temperature        = 1.0     # set temperature
 
 # number of prod loops
-prod_nloops       = 50000 #200
+prod_nloops       = 200 #200
 # number of integration steps performed in each production loop
 prod_isteps       = 50
 msid_nloops = prod_nloops/4
@@ -393,6 +393,14 @@ print("BWITDH: ",dtr_bwitdh)
 start_time = time.process_time()
 nstep_div100=prod_nloops/100
 nstep_div20=nstep_div100*5
+
+vel = espressopp.analysis.Velocities(system)
+vel.capacity=1
+#vel.gather()
+zbin=50
+dz=Lz/float(zbin)
+zvol=dz*Lx*Ly
+rstep=int(0.8*prod_nloops) #report after simulation run by 80%
 for step in range(prod_nloops+1):
   if step == 0:
     conf.gather()
@@ -547,6 +555,27 @@ for step in range(prod_nloops+1):
       r2_msq=r2_sum/num_chains
       print("R_ETE> %d %.2f" %(step,math.sqrt(r2_msq)))
       #sys.exit(0)
+    
+    #calculate VX
+    if step>=rstep:
+      vel.gather()
+      # calculate z-layer profiles
+      znum=[0]*zbin
+      vx=[.0]*zbin
+      for k in range(Npart):
+        zi=math.floor(conf[0][k][2]/dz)
+        if zi>zbin-1:
+          zi=zbin-1
+        vshear=shear_rate*(conf[0][k][2]-Lz/2.0)
+        znum[zi]+=1
+        if shear_rate > .0:
+          vx[zi]+=vel[0][k][0]+vshear
+      for z in range(zbin):
+        if znum[z]>0:
+          if shear_rate > .0:
+            vx[z]/=float(znum[z])*shear_rate*Lz/2.0
+        zpos=float(z+0.5)/float(zbin)
+        print("VX> %.3f %.6f" %(zpos,vx[z]))
   conf.clear()
 #  gc.collect()
 end_time = time.process_time()
