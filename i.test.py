@@ -562,7 +562,7 @@ for step in range(prod_nloops+1):
       # calculate z-layer profiles
       znum=[0]*zbin
       vx=[.0]*zbin
-      for k in range(Npart):
+      for k in range(num_particles):
         zi=math.floor(conf[0][k][2]/dz)
         if zi>zbin-1:
           zi=zbin-1
