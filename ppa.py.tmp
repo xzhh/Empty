@@ -122,6 +122,7 @@ def getCOM(x,n1,n,Lx,Ly,Lz,offs):
 rc = pow(2.0, 1.0/6.0)
 skin = 0.3
 ifVisc = True
+ifMSD = False
 dpd = True
 ifbond = True
 skipPPA=False
@@ -406,7 +407,7 @@ if rloop==0:
   rloop=1
 rcount=0
 for step in range(prod_nloops+1):
-  if step == 0:
+  if step == 0 and ifMSD:
     conf.gather()
     for k in range(num_chains):
       #determine the xyz of central monomer
@@ -442,148 +443,150 @@ for step in range(prod_nloops+1):
     #espressopp.tools.pdb.pdbwrite(filename, system, append=True)
     #espressopp.tools.xyzfilewrite(filename, system, velocities = False, charge = False, append=True, atomtypes={0:'X'})
     
-    conf.gather()
-    # calculate MSD for central monomers (initialize)
-    gxx=0.0
-    gyy=0.0
-    gzz=0.0
-    gxz=0.0
-    #d_stream=[]
-    for k in range(num_chains):
-      for i in range(3):
-        pos_sav[k][i]=pos_cur[k][i]
-
-      if monomers_per_chain%2==1:
-        cid1=int(monomers_per_chain*k+(monomers_per_chain+1)/2+0.00001)
-      else:
-        cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
-      for i in range(3):
-        pos_cur[k][i]=conf[0][cid1][i]
-      if monomers_per_chain%2==0:
-        cid2=cid1+1
-        l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+    if ifMSD:
+      conf.gather()
+      # calculate MSD for central monomers (initialize)
+      gxx=0.0
+      gyy=0.0
+      gzz=0.0
+      gxz=0.0
+      #d_stream=[]
+      for k in range(num_chains):
         for i in range(3):
-          pos_cur[k][i]+=l[i]/2.0
-      #caculate the displacement of central monomers for prod_isteps
-      l=wrap(pos_sav[k],pos_cur[k],Lx,Ly,Lz,system.shearOffset)
-      for i in range(3):
-        dpl[k*3+i]+=l[i]
-        pos_cur[k][i]=pos_sav[k][i]+l[i]
-      #determine CoM for the current step (in the same image space at t'=t-dt)
-      ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
-      lcm=wrap(pcm_sav[k],ptmp,Lx,Ly,Lz,system.shearOffset)
-      for i in range(3):
-        ptmp[i]=pcm_sav[k][i]+lcm[i]
-      #calculate shear contribution in x propagation
-      if shear_rate>.0:
-        d_stream[k]+=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
-      #print("CHAIN %d STEP %d [%.4f %.4f %.4f] (%.4f %.4f %.4f) / %.4f %.4f" %(k,step,pos_cur[k][0],pos_cur[k][1],pos_cur[k][2],ptmp[0],ptmp[1],ptmp[2],dpl[k*3+0],d_stream[k]))
-#      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
-#      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*float(step-1))
-      for i in range(3): pcm_sav[k][i]=ptmp[i]
-      del l
-      del lcm
-      del ptmp
-
-      xtmp=dpl[k*3+0]-d_stream[k]
-      #check equi-distribution of GXX at diff stream layers
-#      if step==prod_nloops:
-      if step%nstep_div20==0:
-        bi=int(abs(d_stream[k])/dtr_bwitdh/float(step))
-        if bi<dtr_bin:
-          dtr_xx[bi]+=xtmp*xtmp
-          dtr_cnt[bi]+=1
-      gxx+=xtmp*xtmp
-      gyy+=dpl[k*3+1]*dpl[k*3+1]
-      gzz+=dpl[k*3+2]*dpl[k*3+2]
-      gxz+=xtmp*dpl[k*3+2]
-    print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
-#    print("G00> %.3f %.6f" %(step*timestep*prod_isteps,d0*d0))
-    print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,gxx/float(num_chains)))
-    print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,gyy/float(num_chains)))
-    print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
-    print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
-#    sys.exit(0)
-#    if step==prod_nloops:
-    if step%nstep_div20==0:
-#      espressopp.tools.pdb.pdbwrite("traj_md.pdb", system, append=True)
-      for i in range(dtr_bin):
-        if dtr_cnt[i]>0:  
-          print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i]),dtr_cnt[i]))
+          pos_sav[k][i]=pos_cur[k][i]
+  
+        if monomers_per_chain%2==1:
+          cid1=int(monomers_per_chain*k+(monomers_per_chain+1)/2+0.00001)
         else:
-          print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),.0,0))
-        dtr_xx[i]=.0
-        dtr_cnt[i]=0
-#      sys.exit(0)
-    if step%nstep_div100==0:
-      r2_sum=.0
-      for i in range(num_chains):
-        dim=[0,0,0]
-        jj=monomers_per_chain*i+1
-      
-        for j in range(1,monomers_per_chain):
-          jj=monomers_per_chain*i+j
-          l=conf[0][jj+1]-conf[0][jj]
-          if l[2]<-Lz/2.0:
-            while l[2]<-Lz/2.0:
-              dim[2]+=1
-              l[2]+=Lz
-              l[0]+=system.shearOffset
-          elif l[2]>Lz/2.0:
-            while l[2]>Lz/2.0:
-              dim[2]-=1
-              l[2]-=Lz
-              l[0]-=system.shearOffset
-          if l[1]<-Ly/2.0:
-            while l[1]<-Ly/2.0:
-              dim[1]+=1
-              l[1]+=Ly
-          elif l[1]>Ly/2.0:
-            while l[1]>Ly/2.0:
-              dim[1]-=1
-              l[1]-=Ly
-          if l[0]<-Lx/2.0:
-            while l[0]<-Lx/2.0:
-             dim[0]+=1
-             l[0]+=Lx
-          elif l[0]>Lx/2.0:
-            while l[0]>Lx/2.0:
-              dim[0]-=1
-              l[0]-=Lx
+          cid1=int(monomers_per_chain*k+monomers_per_chain/2+0.00001)
+        for i in range(3):
+          pos_cur[k][i]=conf[0][cid1][i]
+        if monomers_per_chain%2==0:
+          cid2=cid1+1
+          l=wrap(conf[0][cid1],conf[0][cid2],Lx,Ly,Lz,system.shearOffset)
+          for i in range(3):
+            pos_cur[k][i]+=l[i]/2.0
+        #caculate the displacement of central monomers for prod_isteps
+        l=wrap(pos_sav[k],pos_cur[k],Lx,Ly,Lz,system.shearOffset)
+        for i in range(3):
+          dpl[k*3+i]+=l[i]
+          pos_cur[k][i]=pos_sav[k][i]+l[i]
+        #determine CoM for the current step (in the same image space at t'=t-dt)
+        ptmp=getCOM(conf[0],k*monomers_per_chain+1,monomers_per_chain,Lx,Ly,Lz,system.shearOffset)
+        lcm=wrap(pcm_sav[k],ptmp,Lx,Ly,Lz,system.shearOffset)
+        for i in range(3):
+          ptmp[i]=pcm_sav[k][i]+lcm[i]
+        #calculate shear contribution in x propagation
+        if shear_rate>.0:
+          d_stream[k]+=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
+        #print("CHAIN %d STEP %d [%.4f %.4f %.4f] (%.4f %.4f %.4f) / %.4f %.4f" %(k,step,pos_cur[k][0],pos_cur[k][1],pos_cur[k][2],ptmp[0],ptmp[1],ptmp[2],dpl[k*3+0],d_stream[k]))
+  #      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
+  #      dpl[k*3+0]-=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*float(step-1))
+        for i in range(3): pcm_sav[k][i]=ptmp[i]
+        del l
+        del lcm
+        del ptmp
+  
+        xtmp=dpl[k*3+0]-d_stream[k]
+        #check equi-distribution of GXX at diff stream layers
+  #      if step==prod_nloops:
+        if step%nstep_div20==0:
+          bi=int(abs(d_stream[k])/dtr_bwitdh/float(step))
+          if bi<dtr_bin:
+            dtr_xx[bi]+=xtmp*xtmp
+            dtr_cnt[bi]+=1
+        gxx+=xtmp*xtmp
+        gyy+=dpl[k*3+1]*dpl[k*3+1]
+        gzz+=dpl[k*3+2]*dpl[k*3+2]
+        gxz+=xtmp*dpl[k*3+2]
+      print("MSD> %.3f %.6f" %(step*timestep*prod_isteps,(gxx+gyy+gzz)/float(num_chains)))
+  #    print("G00> %.3f %.6f" %(step*timestep*prod_isteps,d0*d0))
+      print("GXX> %.3f %.6f" %(step*timestep*prod_isteps,gxx/float(num_chains)))
+      print("GYY> %.3f %.6f" %(step*timestep*prod_isteps,gyy/float(num_chains)))
+      print("GZZ> %.3f %.6f" %(step*timestep*prod_isteps,gzz/float(num_chains)))
+      print("GXZ> %.3f %.6f" %(step*timestep*prod_isteps,gxz/float(num_chains)))
+  #    sys.exit(0)
+  #    if step==prod_nloops:
+      if step%nstep_div20==0:
+  #      espressopp.tools.pdb.pdbwrite("traj_md.pdb", system, append=True)
+        for i in range(dtr_bin):
+          if dtr_cnt[i]>0:  
+            print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),dtr_xx[i]/float(dtr_cnt[i]),dtr_cnt[i]))
+          else:
+            print("STREAM> %d %.2f %.2f %d" %(step,float((i+0.5)*0.1),.0,0))
+          dtr_xx[i]=.0
+          dtr_cnt[i]=0
+  #      sys.exit(0)
+      if step%nstep_div100==0:
+        r2_sum=.0
+        for i in range(num_chains):
+          dim=[0,0,0]
+          jj=monomers_per_chain*i+1
         
-        rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
-        rtmp[2]+=float(dim[2])*Lz
-        rtmp[0]+=float(dim[2])*system.shearOffset
-        rtmp[1]+=float(dim[1])*Ly
-        rtmp[0]+=float(dim[0])*Lx
-        r2_sum+=rtmp.abs()**2
-      r2_msq=r2_sum/num_chains
-      print("R_ETE> %d %.2f" %(step,math.sqrt(r2_msq)))
-      #sys.exit(0)
-    
-    #calculate VX
-    if shear_rate>.0 and step>rstep:
-      vel.gather()
-      # calculate z-layer profiles
-      if rcount==0:
-        znum=[0]*zbin
-        vx=[.0]*zbin
-      for k in range(num_particles):
-        zi=math.floor(conf[0][k][2]/dz)
-        if zi<=zbin-1:
-          vshear=shear_rate*(conf[0][k][2]-Lz/2.0)
-          znum[zi]+=1
-          vx[zi]+=vel[0][k][0]+vshear
-      rcount=(rcount+1)%rloop
-      if rcount==0:
-        for z in range(zbin):
-          if znum[z]>0:
-            vx[z]/=float(znum[z])*shear_rate*Lz/2.0
-          zpos=float(z+0.5)/float(zbin)
-          print("VX> %.3f %.6f" %(zpos,vx[z]))
-        del znum
-        del vx
-  conf.clear()
+          for j in range(1,monomers_per_chain):
+            jj=monomers_per_chain*i+j
+            l=conf[0][jj+1]-conf[0][jj]
+            if l[2]<-Lz/2.0:
+              while l[2]<-Lz/2.0:
+                dim[2]+=1
+                l[2]+=Lz
+                l[0]+=system.shearOffset
+            elif l[2]>Lz/2.0:
+              while l[2]>Lz/2.0:
+                dim[2]-=1
+                l[2]-=Lz
+                l[0]-=system.shearOffset
+            if l[1]<-Ly/2.0:
+              while l[1]<-Ly/2.0:
+                dim[1]+=1
+                l[1]+=Ly
+            elif l[1]>Ly/2.0:
+              while l[1]>Ly/2.0:
+                dim[1]-=1
+                l[1]-=Ly
+            if l[0]<-Lx/2.0:
+              while l[0]<-Lx/2.0:
+               dim[0]+=1
+               l[0]+=Lx
+            elif l[0]>Lx/2.0:
+              while l[0]>Lx/2.0:
+                dim[0]-=1
+                l[0]-=Lx
+          
+          rtmp=conf[0][monomers_per_chain*(i+1)]-conf[0][monomers_per_chain*i+1]
+          rtmp[2]+=float(dim[2])*Lz
+          rtmp[0]+=float(dim[2])*system.shearOffset
+          rtmp[1]+=float(dim[1])*Ly
+          rtmp[0]+=float(dim[0])*Lx
+          r2_sum+=rtmp.abs()**2
+        r2_msq=r2_sum/num_chains
+        print("R_ETE> %d %.2f" %(step,math.sqrt(r2_msq)))
+        #sys.exit(0)
+      
+      #calculate VX
+      if shear_rate>.0 and step>rstep:
+        vel.gather()
+        # calculate z-layer profiles
+        if rcount==0:
+          znum=[0]*zbin
+          vx=[.0]*zbin
+        for k in range(num_particles):
+          zi=math.floor(conf[0][k][2]/dz)
+          if zi<=zbin-1:
+            vshear=shear_rate*(conf[0][k][2]-Lz/2.0)
+            znum[zi]+=1
+            vx[zi]+=vel[0][k][0]+vshear
+        rcount=(rcount+1)%rloop
+        if rcount==0:
+          for z in range(zbin):
+            if znum[z]>0:
+              vx[z]/=float(znum[z])*shear_rate*Lz/2.0
+            zpos=float(z+0.5)/float(zbin)
+            print("VX> %.3f %.6f" %(zpos,vx[z]))
+          del znum
+          del vx
+  if ifMSD:
+    conf.clear()
 #  gc.collect()
 end_time = time.process_time()
 print("production finished")
