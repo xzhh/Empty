@@ -81,7 +81,9 @@ def wrap(a,b,box,offs):
 # 1. specification of the main simulation parameters                   #
 ########################################################################
 dpd=True
-ifVisc = True
+ifVisc=True
+ifMSD=False
+r_start=0.8 # start from r_start*100% of production
 # number of particles
 Npart              = 2000
 # density of particles
@@ -89,7 +91,6 @@ rho                = 0.844
 # shear rate
 shear_rate         = #RATE# # set 2.0 = a top/bot particle shears by a length of box_L every unit time (ps)
 # when to start reporting profile 
-r_start = 0.8 # start from r_start*100% of production
 
 # length of simulation box
 Lx = 1
@@ -420,19 +421,19 @@ for step in range(prod_nloops+1):
     vel.gather()
     
     # calculate MSD
-    msd=[.0,.0,.0]
-    for k in range(Npart):
-      l=wrap(conf[1][k],conf[0][k],box,system.shearOffset)
-      #d_stream[k]+=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
-      for i in range(3):
-        dpl[k*3+i]+=l[i]
-        if i==0:
-          dpl[k*3]-=shear_rate*del_t*(conf[0][k][2]+conf[1][k][2]-Lz)*0.5
-        msd[i]+=dpl[k*3+i]*dpl[k*3+i]
-    print("MSD> %.3f %.6f" %(step*dt*prod_isteps,(msd[0]+msd[1]+msd[2])/float(Npart)))
-    print("MSX> %.3f %.6f" %(step*dt*prod_isteps,msd[0]/float(Npart)))
-    print("MSY> %.3f %.6f" %(step*dt*prod_isteps,msd[1]/float(Npart)))
-    print("MSZ> %.3f %.6f" %(step*dt*prod_isteps,msd[2]/float(Npart)))
+    if ifMSD:
+      msd=[.0,.0,.0]
+      for k in range(Npart):
+        l=wrap(conf[1][k],conf[0][k],box,system.shearOffset)
+        for i in range(3):
+          dpl[k*3+i]+=l[i]
+          if i==0:
+            dpl[k*3]-=shear_rate*del_t*(conf[0][k][2]+conf[1][k][2]-Lz)*0.5
+          msd[i]+=dpl[k*3+i]*dpl[k*3+i]
+      print("MSD> %.3f %.6f" %(step*dt*prod_isteps,(msd[0]+msd[1]+msd[2])/float(Npart)))
+      print("MSX> %.3f %.6f" %(step*dt*prod_isteps,msd[0]/float(Npart)))
+      print("MSY> %.3f %.6f" %(step*dt*prod_isteps,msd[1]/float(Npart)))
+      print("MSZ> %.3f %.6f" %(step*dt*prod_isteps,msd[2]/float(Npart)))
     
     if step>=rstep:
       # calculate z-layer profiles
@@ -467,7 +468,8 @@ for step in range(prod_nloops+1):
         print("DENSITY> %.3f %.6f" %(zpos,zrho[z]))
     
     # print shear viscosity
-    print("SIGXZ> %d %.6f" % (step*prod_isteps,system.sumP_xz))
+    if ifVisc:
+      print("SIGXZ> %d %.6f" % (step*prod_isteps,system.sumP_xz))
   
   # print status information
   #espressopp.tools.vmd.imd_positions(system, sock)
