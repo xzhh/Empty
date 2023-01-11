@@ -64,6 +64,19 @@ import numpy as np
 from espressopp.tools import decomp, timers, replicate
 import os
 
+def wrap(a,b,box,offs):
+  l=[.0,.0,.0]
+  n=[.0,.0,.0]
+
+  for i in reversed(range(3)):
+    l[i]=b[i]-a[i]
+    n[i]=float(math.floor(l[i]/box[i]))
+    l[i]-=n[i]*box[i]
+    if i==2:
+      l[0]-=n[2]*offs
+
+  return l
+  
 ########################################################################
 # 1. specification of the main simulation parameters                   #
 ########################################################################
@@ -75,6 +88,8 @@ Npart              = 2000
 rho                = 0.844
 # shear rate
 shear_rate         = #RATE# # set 2.0 = a top/bot particle shears by a length of box_L every unit time (ps)
+# when to start reporting profile 
+r_start = 0.8 # start from r_start*100% of production
 
 # length of simulation box
 Lx = 1
@@ -389,12 +404,13 @@ dpl=(0.0,0.0,0.0)
 dpl=dpl*Npart
 dpl=list(dpl)
 
-zbin=50
+zbin=25
 dz=Lz/float(zbin)
 zvol=dz*Lx*Ly
 
 tstart=time.process_time()
-rstep=int(99.0*prod_nloops) #report after simulation run by 80%
+rstep=int(r_start*prod_nloops) #report after simulation run by 80%
+del_t=dt*float(prod_isteps)
 for step in range(prod_nloops+1):
   if step>0:
     # perform equilibration_isteps integration steps
@@ -404,37 +420,19 @@ for step in range(prod_nloops+1):
     vel.gather()
     
     # calculate MSD
-    msd=0.0
-    msy=0.0
-    msz=0.0
+    msd=[.0,.0,.0]
     for k in range(Npart):
-      l=conf[0][k]-conf[1][k]
-      if l[2]<-Lz/2.0:
-        l[2]+=Lz
-        l[0]+=system.shearOffset
-      elif l[2]>Lz/2.0:
-        l[2]-=Lz
-        l[0]-=system.shearOffset
-      if l[1]<-Ly/2.0:
-        l[1]+=Ly
-      elif l[1]>Ly/2.0:
-        l[1]-=Ly
-      if l[0]<-Lx/2.0:
-        while l[0]<-Lx/2.0:
-          l[0]+=Lx
-      elif l[0]>Lx/2.0:
-        while l[0]>Lx/2.0:
-          l[0]-=Lx
-      for i in range(1,3):
+      l=wrap(conf[1][k],conf[0][k],box,system.shearOffset)
+      #d_stream[k]+=shear_rate*del_t*(ptmp[2]-Lz/2.0+lcm[2]*0.5)
+      for i in range(3):
         dpl[k*3+i]+=l[i]
-        msd+=dpl[k*3+i]*dpl[k*3+i]
-        if i==1:
-          msy+=dpl[k*3+i]*dpl[k*3+i]
-        elif i==2:
-          msz+=dpl[k*3+i]*dpl[k*3+i]
-    print("MSD> %.3f %.6f" %(step*dt*prod_isteps,msd/float(Npart)))
-    print("MSY> %.3f %.6f" %(step*dt*prod_isteps,msy/float(Npart)))
-    print("MSZ> %.3f %.6f" %(step*dt*prod_isteps,msz/float(Npart)))
+        if i==0:
+          dpl[k*3]-=shear_rate*del_t*(conf[0][k][2]+conf[1][k][2]-Lz)*0.5
+        msd[i]+=dpl[k*3+i]*dpl[k*3+i]
+    print("MSD> %.3f %.6f" %(step*dt*prod_isteps,(msd[0]+msd[1]+msd[2])/float(Npart)))
+    print("MSX> %.3f %.6f" %(step*dt*prod_isteps,msd[0]/float(Npart)))
+    print("MSY> %.3f %.6f" %(step*dt*prod_isteps,msd[1]/float(Npart)))
+    print("MSZ> %.3f %.6f" %(step*dt*prod_isteps,msd[2]/float(Npart)))
     
     if step>=rstep:
       # calculate z-layer profiles
