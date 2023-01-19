@@ -90,7 +90,6 @@ Npart              = 2000
 rho                = 0.844
 # shear rate
 shear_rate         = #RATE# # set 2.0 = a top/bot particle shears by a length of box_L every unit time (ps)
-# when to start reporting profile 
 
 # length of simulation box
 Lx = 1
