@@ -22,9 +22,9 @@ equi_isteps = 50
 
 
 # number of production loops
-prod_nloops       = 3000 #3 ns
+prod_nloops       = 100 #3 ns
 # number of integration steps performed in each production loop
-prod_isteps       = 2000
+prod_isteps       = 100
 
 
 USE_EWALD = True #true: use Ewald; false: use Reac field

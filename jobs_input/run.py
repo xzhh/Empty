@@ -57,16 +57,16 @@ elif (sys.argv[1]=='1'):
     simulation_type = 'continue'
 
 
-USE_EWALD = simulation_data.USE_EWALD #true: use Ewald; false: use Reac field
-USE_DPD = simulation_data.USE_DPD #true: use DPD thermostat; false: use Langevin thermostat
+USE_EWALD = False #simulation_data.USE_EWALD #true: use Ewald; false: use Reac field
+USE_DPD = True #simulation_data.USE_DPD #true: use DPD thermostat; false: use Langevin thermostat
 
-SKIP_EQUI = simulation_data.SKIP_EQUI
-USE_CONSTRAIN = simulation_data.USE_CONSTRAIN # SHAKE, but unsure whether it works
+SKIP_EQUI = False #simulation_data.SKIP_EQUI
+USE_CONSTRAIN = False #simulation_data.USE_CONSTRAIN # SHAKE, but unsure whether it works
 # simulation parameters (nvt = False is nve)
 rc    = simulation_data.rc  # Verlet list cutoff
 skin  = simulation_data.skin
 tot_types = simulation_data.tot_types
-timestep = simulation_data.timestep # 0.001 ps will crash, d't know what's going on
+timestep = 0.0002 #simulation_data.timestep # 0.001 ps will crash, d't know what's going on
 result_directory = simulation_data.result_directory
 result_file = simulation_data.result_file
 
@@ -171,7 +171,7 @@ dihedralinteractions=gromacs.setDihedralInteractions(system, dihedraltypes, dihe
 
 if not USE_EWALD:  #truncated coulomb
     # set up coulomb interactions according to the parameters read from the .top file
-    qq_interactions=gromacs.setCoulombInteractions(system, vl, rc, types, epsilon1=1, epsilon2=80, kappa=0)
+    qq_interactions=gromacs.setCoulombInteractions(system, vl, rc, types, epsilon1=1, epsilon2=17, kappa=0)
 else:
     #define coulomb interactions with ewald
     coulomb_prefactor = 138.935485
@@ -216,19 +216,19 @@ if USE_CONSTRAIN:
 
 
 if not USE_DPD: # langevin thermostat
-    langevin = espressopp.integrator.LangevinThermostat(system)
-    langevin.gamma = 0.5
-    langevin.temperature = 2.4942 # kT in gromacs units 
+    thermo = espressopp.integrator.LangevinThermostat(system)
+    thermo.gamma = 0.5
+    thermo.temperature = 2.4942 # kT in gromacs units 
     integrator = espressopp.integrator.VelocityVerlet(system)
-    integrator.addExtension(langevin)
+    integrator.addExtension(thermo)
     integrator.dt = timestep
 
 else: #DPD thrmostat
-    dpd = espressopp.integrator.DPDThermostat(system, vl, num_particles)
-    dpd.gamma = 1.0 # should be higher then langevin
-    dpd.temperature = 2.4942 # kT in gromacs units 
+    thermo = espressopp.integrator.DPDThermostat(system, vl, num_particles)
+    thermo.gamma = 1.0 # should be higher then langevin
+    thermo.temperature = 2.4942 # kT in gromacs units 
     integrator = espressopp.integrator.VelocityVerlet(system)
-    integrator.addExtension(dpd)
+    integrator.addExtension(thermo)
     integrator.dt = timestep
 
 if USE_CONSTRAIN:
@@ -319,7 +319,7 @@ elif (simulation_type=='continue'):
     integrator2.step = int(functions.last_time_finder(result_file)/timestep)#0 set the integration step to the latest integration step from the previous simulation
 
 
-integrator2.addExtension(langevin)
+integrator2.addExtension(thermo)
 # since the interaction cut-off changed the size of the cells that are used
 # to speed up verlet list builds should be adjusted accordingly 
 #system.storage.cellAdjust()
@@ -372,7 +372,7 @@ for step in range(starting_frame, prod_nloops+1):
     currentStep=step*prod_isteps
     if step>0:
         integrator2.run(prod_isteps) # print out every steps/check steps
-    
+    print("PROD-TEST>:") 
     T = temperature.compute()
     #P = pressure.compute()
     #Pij = pressureTensor.compute()
