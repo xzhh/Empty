@@ -76,11 +76,11 @@ timestep = 0.001
 tot_types= 5 # The total num of atomic types, 5 (0~4) in this case
 
 # add shear rate / NSteps
-shear_rate = 0.1
+shear_rate = 0.001
 equi_nloops = 200  # total steps = nloops * isteps
 equi_isteps = 50
 # number of prod loops
-prod_nloops       = 20000 #2 ns
+prod_nloops       = 2000 #2 ns
 # number of integration steps performed in each production loop
 prod_isteps       = 100
 
@@ -297,12 +297,13 @@ angleinteractions=gromacs.setAngleInteractions(system, angletypes, angletypepara
 
 #DPD
 dpd=espressopp.integrator.DPDThermostat(system, vl, num_particles)
-dpd.gamma=5.0
+dpd.gamma=1.0
 dpd.tgamma=0.0
 dpd.temperature = 2.4942
 integrator = espressopp.integrator.VelocityVerlet(system)
 integrator.addExtension(dpd)
 integrator.dt = timestep
+system.lebcMode=0
 
 # print simulation parameters
 print('')
@@ -431,7 +432,7 @@ for i in range(prod_nloops):
 out_energy.close()
 # print timings and neighbor list information
 end_time = time.process_time()
-timers.show(integrator.getTimers(), precision=4)
+timers.show(integrator2.getTimers(), precision=4)
 sys.stdout.write('Total # of neighbors = %d\n' % vl.totalSize())
 sys.stdout.write('Ave neighs/atom = %.1f\n' % (vl.totalSize() / float(num_particles)))
 sys.stdout.write('Neighbor list builds = %d\n' % vl.builds)
