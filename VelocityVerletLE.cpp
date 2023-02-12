@@ -48,6 +48,8 @@ namespace espressopp
 {
 int shift_count = 0;
 double offs_sav = .0;
+long long initStep = 0;
+bool shift_init = true;
 
 using namespace std;
 namespace integrator
@@ -140,19 +142,44 @@ void VelocityVerletLE::run(int nsteps)
 
     if (system.ifViscosity) system.sumP_xz = .0;
 
-    if (getStep()==0 && system.shearOffset>.0)
+    if (shift_init)
     {
-        offs_sav=system.shearOffset;
-        cshift = static_cast<int>(floor(offs_sav * ngrid / Lx + 0.5));
-        
-        if (cshift < 0) throw std::runtime_error(
-           "VelocityVerletLE error: Error in initializing remapNeighbourCells for a restart run\n");
-        for (int i=0; i < cshift; i++){
-            shift_count++;
-            storage.remapNeighbourCells(shift_count);
-            system.ghostShift = shift_count;
-            resortFlag = true;
+        if (system.shearOffset > .0)
+        {
+            offs_sav = system.shearOffset;
         }
+        else if (getStep() > 0)
+        {
+            real offs = shearRate * Lz * (getStep() + .0) * getTimeStep();
+            int xtmp = static_cast<int>(floor(offs / Lx));
+            offs_sav = offs - (xtmp + .0) * Lx;
+        }
+        else
+            shift_init = false;
+
+        if (shift_init)
+        {
+            cshift = static_cast<int>(floor(offs_sav * ngrid / Lx + 0.5));
+            // if (system.comm->rank()==0)
+            // std::cout<<"CSHIFT> "<<cshift<<" "<<offs_sav<<" "<<getStep()<<" \n";
+            if (cshift < 0)
+                throw std::runtime_error(
+                    "VelocityVerletLE error: Error in initializing remapNeighbourCells for a "
+                    "restart run\n");
+            for (int i = 0; i < cshift; i++)
+            {
+                shift_count++;
+                storage.remapNeighbourCells(shift_count);
+                system.ghostShift = shift_count;
+                // resortFlag = true;
+                VT_TRACER("resort1");
+                storage.decompose();
+                maxDist = 0.0;
+                resortFlag = false;
+            }
+            initStep = getStep();
+        }
+        shift_init = false;
     }
 
     for (int i = 0; i < nsteps; i++)
@@ -187,10 +214,14 @@ void VelocityVerletLE::run(int nsteps)
 
         LOG4ESPP_INFO(theLogger, "maxDist = " << maxDist << ", skin/2 = " << skinHalf);
 
-        int ctmp = static_cast<int>(floor(
-            offs_sav + shearRate * static_cast<real>(getStep()) * getTimeStep() * ngrid * Lz / Lx + 0.5));
-        cshift = static_cast<int>(floor(
-            offs_sav + shearRate * static_cast<real>(getStep() + 1) * getTimeStep() * ngrid * Lz / Lx + 0.5));
+        int ctmp = static_cast<int>(floor(offs_sav +
+                                          shearRate * static_cast<real>(getStep() - initStep) *
+                                              getTimeStep() * ngrid * Lz / Lx +
+                                          0.5));
+        cshift = static_cast<int>(floor(offs_sav +
+                                        shearRate * static_cast<real>(getStep() - initStep + 1) *
+                                            getTimeStep() * ngrid * Lz / Lx +
+                                        0.5));
 
         if (cshift > ctmp)
         {
@@ -410,9 +441,10 @@ real VelocityVerletLE::integrate1()
 
     // set boundary offset of a shear flow
     real offs;
-    offs = offs_sav + shearRate * Lz * (getStep() + 1.0) * getTimeStep();
+    offs = offs_sav + shearRate * Lz * (getStep() - initStep + 1.0) * getTimeStep();
     int xtmp = static_cast<int>(floor(offs / Lx));
     system.shearOffset = offs - (xtmp + .0) * Lx;
+
     // if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL && system.comm->rank()==0)
     // std::cout<<"SHEAR> "<<system.shearOffset<<" \n";
 
