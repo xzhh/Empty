@@ -122,8 +122,6 @@ private:
 
     dcomplex* sum;
     dcomplex* totsum;
-    
-    int flag_pxz=1;
 
 public:
     static void registerPython();
@@ -142,13 +140,13 @@ public:
         Lz = Li[2];
 
         // test code
-        /*if (getenv("CTHETAX10")!=NULL){
-          cottheta=(atoi(getenv("CTHETAX10"))+.0)/10.0;
-          shear_flag=true;
-          std::cout<<"COTTHETA> "<<cottheta<<" \n";
-        }*/
-if (getenv("P_XZ")!=NULL)
-flag_pxz==atoi(getenv("P_XZ"));
+        if (getenv("COT_x_100") != NULL)
+        {
+            cottheta = (atoi(getenv("COT_x_100")) + .0) / 100.0;
+            shear_flag = true;
+            // std::cout<<"COTTHETA> "<<cottheta<<" \n";
+        }
+
         real skmax = kmax / min(Lx, min(Ly, Lz));
         real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
 
@@ -281,6 +279,7 @@ flag_pxz==atoi(getenv("P_XZ"));
         real rksq, rkx2, rky2, rkz2;
         real rLx2 = 1. / (Lx * Lx);
         real rLy2 = 1. / (Ly * Ly);
+        real rLz2 = 1. / (Lz * Lz);
         real rk2PIx, rk2PIy, rk2PIz;
         kVectorLength = 0;
 
@@ -295,8 +294,8 @@ flag_pxz==atoi(getenv("P_XZ"));
         kz_ind.clear();
         virialDyadicXZ.clear();
 
-        int min_ky = 0;
-        int min_kz = 1;
+        int min_ky = 0;  //-kmax;
+        int min_kz = 1;  //-kmax;
 
         for (int kx = 0; kx <= kmax; kx++)
         {
@@ -311,14 +310,14 @@ flag_pxz==atoi(getenv("P_XZ"));
                 for (int kz = min_kz; kz <= kmax; kz++)
                 {
                     kz2 = kz * kz;
-                    rkz2 = (kz + .0) / Lz - cottheta * (kx + .0) / Lx;
-                    rkz2 = rkz2 * rkz2;
-                    rk2PIz = kz * rclz;
+                    rkz2 = kz - cottheta * (kx + .0);
+                    rk2PIz = rkz2 * rclz;  // DO NOT USE THE FINAL rkz2
+                    rkz2 = rkz2 * rkz2 * rLz2;
 
                     ksq = kx2 + ky2 + kz2;
                     rksq = rkx2 + rky2 + rkz2;
 
-                    if ((rksq < skmaxsq) && (ksq != 0))
+                    if ((rksq < skmaxsq) && (rksq > 1.0e-8))
                     {
                         kvector.push_back(exp(-rksq * B) / (rksq * V));
 
@@ -425,6 +424,7 @@ flag_pxz==atoi(getenv("P_XZ"));
         if (shear_flag)
         {
             real offs = system->shearOffset;
+            // if (getenv("COT_x_100")==NULL)
             cottheta = ((offs > Lx / 2.0 ? offs - Lx : offs)) / Lz;
         }
         /* Calculation of k space sums */
@@ -449,10 +449,21 @@ flag_pxz==atoi(getenv("P_XZ"));
             {
                 Particle& p = *it;
 
-                real intc = Lx / cottheta;
-                real zshift = -p.position()[0] / cottheta;
-                int nshift = static_cast<int>(floor((p.position()[2] + zshift) / intc) + 1.0);
-                real px = p.position()[0] + (nshift + .0) * Lx;
+                real px;
+                if (cottheta > .0)
+                {
+                    real intc = Lx / cottheta;
+                    real zshift = -p.position()[0] / cottheta;
+                    real nshift = floor((p.position()[2] + zshift) / intc) + 1.0;
+                    px = p.position()[0] + nshift * Lx;
+                }
+                else
+                {
+                    real intc = Lx / (-cottheta);
+                    real zshift = (Lx - p.position()[0]) / cottheta;
+                    real nshift = floor((p.position()[2] + zshift) / intc) + 1.0;
+                    px = p.position()[0] - nshift * Lx;
+                }
 
                 eikx[0][j] = dcomplex(1.0, 0.0);
                 eiky[kmax + 0][j] = dcomplex(1.0, 0.0);
@@ -586,10 +597,17 @@ flag_pxz==atoi(getenv("P_XZ"));
             else
             {
                 fact = 2.0;
-                if (shear_flag && system->ifViscosity && kzfield[k] != 0)
-                  if(flag_pxz)
-                    system->dyadicP_xz +=
-                        kvector[k] * virialDyadicXZ[k] * norm(totsum[k]) * kxfield[k] * kzfield[k];
+                if (shear_flag && system->ifViscosity)
+                {
+                    real rkxz_prod =
+                        static_cast<real>(kxfield[k]) *
+                        (static_cast<real>(kzfield[k]) - cottheta * static_cast<real>(kxfield[k]));
+                    if (abs(rkxz_prod) > 1.0e-8)
+                    {
+                        system->dyadicP_xz +=
+                            kvector[k] * virialDyadicXZ[k] * norm(totsum[k]) * rkxz_prod;
+                    }
+                }
             }
 
             dcomplex tff = fact * kvector[k] * totsum[k];  // auxiliary complex factor
