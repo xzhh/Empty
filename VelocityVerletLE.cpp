@@ -67,6 +67,8 @@ VelocityVerletLE::VelocityVerletLE(shared_ptr<System> system, real _shearRate, b
     resortFlag = true;
     maxDist = 0.0;
     nResorts = 0;
+    flag_sllod = 0;
+    if (getenv("FLAG_SLLOD")!=NULL) flag_sllod=atoi(getenv("FLAG_SLLOD"));
     if (shearRate != .0)
     {
         System& system = getSystemRef();
@@ -397,12 +399,9 @@ real VelocityVerletLE::integrate1()
         real dtfm = 0.5 * dt / cit->mass();
 
         // Propagate velocities for X dim (SLLOD).
-        cit->velocity()[0] +=
-            dtfm * cit->force()[0] - 0.5 * dt * cit->velocity()[2] * shearRate;  // With-SLLOD
-        // cit->velocity()[0] += dtfm * cit->force()[0]; // Non-SLLOD
-        real vshear = shearRate * (cit->position()[2] - halfL);
-        // + 0.5 * cit->velocity()[2] * dt // first
-        // + dtfm * cit->force()[2] * dt / 3.0); // and second order for coord propagation
+        cit->velocity()[0] += dtfm * cit->force()[0];
+	if (flag_sllod >= 1)
+            cit->velocity()[0] -= 0.5 * dt * cit->velocity()[2] * shearRate;  // With-SLLOD
         // Propagate velocities for Y-Z dim.: v(t+0.5*dt) = v(t) + 0.5*dt * f(t)
         cit->velocity()[2] += dtfm * cit->force()[2];
         cit->velocity()[1] += dtfm * cit->force()[1];
@@ -410,9 +409,15 @@ real VelocityVerletLE::integrate1()
         // Propagate positions (only NVT): p(t + dt) = p(t) + dt * v(t+0.5*dt)
         Real3D deltaP = {.0, .0, .0};
         deltaP = cit->velocity();
-
-        // Add shear speed into X dim.
-        deltaP[0] += vshear;
+        // Add shear contribution into X dim.                                                   
+        if (flag_sllod%2==0)                                                                    
+        {                                                                                       
+            real vshear = shearRate * (cit->position()[2] - halfL);                             
+              // + 0.5 * cit->velocity()[2] * dt // first                                       
+              // + dtfm * cit->force()[2] * dt / 3.0); // and second order for coord propagation
+            deltaP[0] += vshear;                                                                
+        }                                                                                       
+             
         deltaP *= dt;
         cit->position() += deltaP;
         sqDist += deltaP * deltaP;
@@ -479,7 +484,8 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
+	    if (flag_sllod >= 1)
+                cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
             // Need to add propagation of shear speed if necessary
             // Collect xz-&zx- components from stress Tensor
             mv2 += cit->mass() * cit->velocity()[0] * cit->velocity()[2];
@@ -505,7 +511,8 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
+	    if (flag_sllod >= 1)
+                cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
         }
     }
 
