@@ -140,12 +140,12 @@ public:
         Lz = Li[2];
 
         // test code
-        if (getenv("COT_x_100") != NULL)
+        /* if (getenv("COT_x_100") != NULL)
         {
             cottheta = (atoi(getenv("COT_x_100")) + .0) / 100.0;
             shear_flag = true;
             // std::cout<<"COTTHETA> "<<cottheta<<" \n";
-        }
+        }*/
 
         real skmax = kmax / min(Lx, min(Ly, Lz));
         real skmaxsq = skmax * skmax;  // we choose the biggest cutoff
