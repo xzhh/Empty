@@ -6,7 +6,7 @@ ESPP_EVAL_DIR="/lustre/miifs01/project/m2_zdvresearch/zhexu/build-h4e-intel2020-
 export PYTHONPATH="${PYTHONPATH}:${ESPP_EVAL_DIR}"
 
 dtmp=$(date "+%N")
-DATEF=$(date "+%y%m%d-%H%M%S.")${tmp: -3}
+DATEF=$(date "+%y%m%d-%H%M%S.")${dtmp: -3}
 echo DATEF=${DATEF}
 OUT_BASE="${0##*/}-${DATEF}"
 echo OUT_BASE=${OUT_BASE}
