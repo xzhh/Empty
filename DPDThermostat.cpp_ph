@@ -40,6 +40,7 @@
 #ifdef RANDOM123_EXIST
 #include "mpi.hpp"
 #include <boost/signals2.hpp>
+#include <random>
 /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
 #ifndef M_PIl
 #define M_PIl 3.1415926535897932384626433832795029L
@@ -149,6 +150,7 @@ void DPDThermostat::thermalize()
         counter = {{0}};
         ukey = {{internal_seed}};
         key = ukey;
+        std::uniform_real_distribution<real> u(-0.5, 0.5);
         // crng = threefry2x64(counter, key);
         // counter.v[0]=ULONG_MAX-1;std::cout<<"CTR> "<<counter.v[0]<<"\n";
         // std::cout<<"RNG-"<<system->comm->rank()<<" ("<<counter
@@ -212,9 +214,11 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
         counter.v[0] =
             (intStep * ntotal * (ntotal - 1) / 2 + (ntotal * (i - 1) - i * (i + 1) / 2 + j)) *
             ncounter_per_pair;
-        crng = threefry2x64(counter, key);  // call rng generator
+        //crng = threefry2x64(counter, key);  // call rng generator
+        MicroURNG<RNG> shorturng(counter, key);
 
-        real zrng = u01<double>(crng.v[0]);
+        //real zrng = u01<double>(crng.v[0]);
+        real zrng = u(shorturng);
 
         /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
         real u2 = u01<double>(crng.v[1]);
@@ -239,7 +243,7 @@ void DPDThermostat::frictionThermoDPD(Particle& p1, Particle& p2)
 
         real friction = pref1 * omega2 * veldiff;
 #ifdef RANDOM123_EXIST
-        real r0 = zrng - 0.5;
+        real r0 = zrng;// - 0.5;
         /*UNCOMMENT TO ENABLE GAUSSIAN DISTRIBUTION
         r0 = zrng;
         */

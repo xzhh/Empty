@@ -38,6 +38,9 @@
 #ifdef RANDOM123_EXIST
 #include <Random123/threefry.h>
 #include <Random123/uniform.hpp>
+#include <Random123/philox.h>
+#include <Random123/MicroURNG.hpp>
+#include <Random123/ReinterpretCtr.hpp>
 #endif
 
 namespace espressopp
@@ -112,9 +115,13 @@ private:
     uint64_t ncounter_per_pair;
 #ifdef RANDOM123_EXIST
     // uint64_t seed64;  // user-settable seed
-    Threefry2x64::ctr_type counter, crng;
-    Threefry2x64::ukey_type ukey;
-    Threefry2x64::key_type key;
+    //Threefry2x64::ctr_type counter, crng;
+    //Threefry2x64::ukey_type ukey;
+    //Threefry2x64::key_type key;
+    typedef Philox2x64 RNG;
+    RNG::ctr_type counter, crng;
+    RNG::ukey_type ukey;
+    RNG::key_type key;
 #endif
 };
 }  // namespace integrator
