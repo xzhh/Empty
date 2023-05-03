@@ -1,6 +1,6 @@
 integrator               =  md
 ld-seed                  =  -1
-dt                       =  0.0005
+dt                       =  0.0000001
 nsteps                   =  1
 
 comm_mode		 =  linear
@@ -34,7 +34,7 @@ rvdw                     =  1.2
 tc-grps			 =  system
 tau_t                    =  2.0
 bd-fric                  =  0 
-ref_t                    =  400 
+ref_t                    =  0.1 
 
 Pcoupl                   =  no
 pcoupltype		 =  isotropic
@@ -49,4 +49,5 @@ continuation		 =  no
 lincs_order		 =  4
 lincs_iter		 =  2
 gen_vel                  =  no
-gen_temp                 =  400
+gen_temp                 =  0.1
+
