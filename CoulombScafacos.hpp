@@ -562,7 +562,7 @@ public:
 
             nlocal_map = k;
         }
-        if (ifTuned)
+        if (1==0) //ifTuned)
         {
             fcs_p3m_get_alpha(handle, &p3m_alpha);
             fcs_p3m_get_r_cut(handle, &p3m_rcut);

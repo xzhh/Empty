@@ -47,6 +47,9 @@
 namespace espressopp
 {
 int shift_count = 0;
+double offs_sav = .0;
+long long initStep = 0;
+bool shift_init = true;
 
 using namespace std;
 namespace integrator
@@ -64,12 +67,16 @@ VelocityVerletLE::VelocityVerletLE(shared_ptr<System> system, real _shearRate, b
     resortFlag = true;
     maxDist = 0.0;
     nResorts = 0;
+    flag_sllod = 0;
+    if (getenv("FLAG_SLLOD")!=NULL) flag_sllod=atoi(getenv("FLAG_SLLOD"));
     if (shearRate != .0)
     {
         System& system = getSystemRef();
         system.shearRate = shearRate;
         system.ifShear = true;
         system.ifViscosity = viscosity;
+if (system.comm->rank()==0)
+std::cout<<"VINIT> "<<getStep()<<" "<<system.shearOffset<<" \n";
     }
     else
     {
@@ -96,6 +103,7 @@ void VelocityVerletLE::run(int nsteps)
     real Lz = system.bc->getBoxL()[2];
     int ngrid =
         storage.getInt3DCellGrid()[0] * system.NGridSize[0];  // storage.getInt3DNodeGrid()[2];
+    int cshift;
 
     // signal
     runInit();
@@ -138,8 +146,51 @@ void VelocityVerletLE::run(int nsteps)
 
     if (system.ifViscosity) system.sumP_xz = .0;
 
+    if (shift_init)
+    {
+        if (system.shearOffset > .0)
+        {
+            offs_sav = system.shearOffset;
+        }
+        else if (getStep() > 0)
+        {
+            real offs = shearRate * Lz * (getStep() + .0) * getTimeStep();
+            int xtmp = static_cast<int>(floor(offs / Lx));
+            offs_sav = offs - (xtmp + .0) * Lx;
+            system.shearOffset = offs_sav;
+        }
+        else
+            shift_init = false;
+
+        if (shift_init)
+        {
+            cshift = static_cast<int>(floor(offs_sav * ngrid / Lx + 0.5));
+//if (system.comm->rank()==0)
+//std::cout<<"CINIT> "<<getStep()<<" "<<offs_sav<<" "<<system.shearOffset<<" \n";
+            if (cshift < 0)
+                throw std::runtime_error(
+                    "VelocityVerletLE error: Error in initializing remapNeighbourCells for a "
+                    "restart run\n");
+            for (int i = 0; i < cshift; i++)
+            {
+                shift_count++;
+                storage.remapNeighbourCells(shift_count);
+                system.ghostShift = shift_count;
+                // resortFlag = true;
+                VT_TRACER("resort1");
+                storage.decompose();
+                maxDist = 0.0;
+                resortFlag = false;
+            }
+            initStep = getStep();
+        }
+        shift_init = false;
+    }
+
     for (int i = 0; i < nsteps; i++)
     {
+//if (system.comm->rank()==0 && i%100==0)
+//std::cout<<"CSHIFT> "<<getStep()<<" "<<cshift<<" / "<<offs_sav<<" "<<system.shearOffset<<" \n";
         LOG4ESPP_INFO(theLogger, "Next step " << i << " of " << nsteps << " starts");
 
         // saveOldPos(); // save particle positions needed for constraints
@@ -170,10 +221,14 @@ void VelocityVerletLE::run(int nsteps)
 
         LOG4ESPP_INFO(theLogger, "maxDist = " << maxDist << ", skin/2 = " << skinHalf);
 
-        int ctmp = static_cast<int>(floor(
-            shearRate * static_cast<real>(getStep()) * getTimeStep() * ngrid * Lz / Lx + 0.5));
-        int cshift = static_cast<int>(floor(
-            shearRate * static_cast<real>(getStep() + 1) * getTimeStep() * ngrid * Lz / Lx + 0.5));
+        int ctmp = static_cast<int>(floor(offs_sav +
+                                          shearRate * static_cast<real>(getStep() - initStep) *
+                                              getTimeStep() * ngrid * Lz / Lx +
+                                          0.5));
+        cshift = static_cast<int>(floor(offs_sav +
+                                        shearRate * static_cast<real>(getStep() - initStep + 1) *
+                                            getTimeStep() * ngrid * Lz / Lx +
+                                        0.5));
 
         if (cshift > ctmp)
         {
@@ -349,12 +404,9 @@ real VelocityVerletLE::integrate1()
         real dtfm = 0.5 * dt / cit->mass();
 
         // Propagate velocities for X dim (SLLOD).
-        // cit->velocity()[0] +=
-        //   dtfm * cit->force()[0] - 0.5 * dt * cit->velocity()[2] * shearRate;  // With-SLLOD
-        cit->velocity()[0] += dtfm * cit->force()[0];  // Non-SLLOD
-        real vshear = shearRate * (cit->position()[2] - halfL);
-        // + 0.5 * cit->velocity()[2] * dt // first
-        // + dtfm * cit->force()[2] * dt / 3.0); // and second order for coord propagation
+        cit->velocity()[0] += dtfm * cit->force()[0];
+	if (flag_sllod >= 1)
+            cit->velocity()[0] -= 0.5 * dt * cit->velocity()[2] * shearRate;  // With-SLLOD
         // Propagate velocities for Y-Z dim.: v(t+0.5*dt) = v(t) + 0.5*dt * f(t)
         cit->velocity()[2] += dtfm * cit->force()[2];
         cit->velocity()[1] += dtfm * cit->force()[1];
@@ -362,9 +414,15 @@ real VelocityVerletLE::integrate1()
         // Propagate positions (only NVT): p(t + dt) = p(t) + dt * v(t+0.5*dt)
         Real3D deltaP = {.0, .0, .0};
         deltaP = cit->velocity();
-
-        // Add shear speed into X dim.
-        deltaP[0] += vshear;
+        // Add shear contribution into X dim.                                                   
+        if (flag_sllod%2==0)                                                                    
+        {                                                                                       
+            real vshear = shearRate * (cit->position()[2] - halfL);                             
+              // + 0.5 * cit->velocity()[2] * dt // first                                       
+              // + dtfm * cit->force()[2] * dt / 3.0); // and second order for coord propagation
+            deltaP[0] += vshear;                                                                
+        }                                                                                       
+             
         deltaP *= dt;
         cit->position() += deltaP;
         sqDist += deltaP * deltaP;
@@ -393,9 +451,10 @@ real VelocityVerletLE::integrate1()
 
     // set boundary offset of a shear flow
     real offs;
-    offs = shearRate * Lz * (getStep() + 1.0) * getTimeStep();
+    offs = offs_sav + shearRate * Lz * (getStep() - initStep + 1.0) * getTimeStep();
     int xtmp = static_cast<int>(floor(offs / Lx));
     system.shearOffset = offs - (xtmp + .0) * Lx;
+
     // if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL && system.comm->rank()==0)
     // std::cout<<"SHEAR> "<<system.shearOffset<<" \n";
 
@@ -430,7 +489,8 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            // cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
+	    if (flag_sllod >= 1)
+                cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
             // Need to add propagation of shear speed if necessary
             // Collect xz-&zx- components from stress Tensor
             mv2 += cit->mass() * cit->velocity()[0] * cit->velocity()[2];
@@ -456,7 +516,8 @@ void VelocityVerletLE::integrate2()
             /* Propagate velocities: v(t+0.5*dt) = v(t) + 0.5*dt * f(t) */
             cit->velocity() += dtfm * cit->force();
             // SLLOD correction
-            // cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
+	    if (flag_sllod >= 1)
+                cit->velocity()[0] -= half_dt * cit->velocity()[2] * shearRate;  // With-SLLOD
         }
     }
 
