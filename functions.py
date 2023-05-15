@@ -71,19 +71,16 @@ def write_h5md(file, system, step, time, record_time, temperature, energy):
 
     #iterating over all particles
     conf = espressopp.analysis.Configurations(system)
+    conf.capacity = 1
     conf.gather()
     vel = espressopp.analysis.ConfigurationsExt(system)
+    vel.capacity = 1
     vel.gather()
-
-    print(conf[0][1])
-    print(vel[0][1])
-    sys.exit(0)
     
     for pid in range(1,max_pid+1):
-                
-        particle = system.storage.getParticle(pid)
-        pos[pid-1, :] = np.array([particle.pos[0], particle.pos[1], particle.pos[2]])
-        v[pid-1, :] = np.array([particle.v[0], particle.v[1], particle.v[2]])
+        #particle = system.storage.getParticle(pid)
+        pos[pid-1, :] = np.array([conf[0][pid][0], conf[0][pid][1], conf[0][pid][2]])
+        v[pid-1, :] = np.array([vel[0][pid][0], vel[0][pid][1], vel[0][pid][2]])
               
         #this if statement detect whether the particle is in the cation or anion molecule and it adds to the corresponding molecule numbers
         if particle.type not in [10, 11]:
