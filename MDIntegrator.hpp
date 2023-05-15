@@ -31,6 +31,7 @@
 #include "Extension.hpp"
 #include <boost/signals2.hpp>
 #include "types.hpp"
+#include "bc/BC.hpp"
 #include "esutil/Error.hpp"
 
 namespace espressopp
@@ -70,11 +71,12 @@ public:
 
     /** Getter routine for integration step */
     void setStep(long long step_) { step = step_;
-        if (getSystemRef().ifShear && getSystemRef().shearRate != .0)
+        System& system = getSystemRef();
+        if (system.ifShear && system.shearRate != .0)
         {
-            real Lx = getSystemRef().bc->getBoxL()[0];
-            real Lz = getSystemRef().bc->getBoxL()[2];
-            real offs_sav = shearRate * Lz * (getStep() + .0) * getTimeStep();
+            real Lx = system.bc->getBoxL()[0];
+            real Lz = system.bc->getBoxL()[2];
+            real offs_sav = system.shearRate * Lz * (getStep() + .0) * getTimeStep();
             int xtmp = static_cast<int>(floor(offs_sav / Lx));
             offs_sav -= (xtmp + .0) * Lx;
             system.shearOffset = offs_sav;

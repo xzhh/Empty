@@ -75,8 +75,6 @@ VelocityVerletLE::VelocityVerletLE(shared_ptr<System> system, real _shearRate, b
         system.shearRate = shearRate;
         system.ifShear = true;
         system.ifViscosity = viscosity;
-if (system.comm->rank()==0)
-std::cout<<"VINIT> "<<getStep()<<" "<<system.shearOffset<<" \n";
     }
     else
     {
@@ -152,13 +150,14 @@ void VelocityVerletLE::run(int nsteps)
         {
             offs_sav = system.shearOffset;
         }
-        else if (getStep() > 0)
+/*        else if (getStep() > 0)
         {
             real offs = shearRate * Lz * (getStep() + .0) * getTimeStep();
             int xtmp = static_cast<int>(floor(offs / Lx));
             offs_sav = offs - (xtmp + .0) * Lx;
             system.shearOffset = offs_sav;
         }
+*/
         else
             shift_init = false;
 
@@ -374,11 +373,10 @@ real VelocityVerletLE::integrate1()
 {
     System& system = getSystemRef();
     CellList realCells = system.storage->getRealCells();
-    // if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL &&
-    // system.comm->rank()==system.irank){ std:cout<<"===========\nRUN01> TimeStep= "<<getStep()<<"
-    // /
-    // "<<system.shearOffset<<"\n------\n";}
-
+/*if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL &&
+system.comm->rank()==system.irank){ std:cout<<"===========\nRUN01> TimeStep= "<<getStep()<<"/"
+<<system.shearOffset<<"\n------\n";}
+*/
     // loop over all particles of the local cells
     int count = 0;
     real maxSqDist = 0.0;  // maximal square distance a particle moves
@@ -429,11 +427,10 @@ real VelocityVerletLE::integrate1()
         // Map to ghost postion if z-position is within the top/bottom layer
         // real le_skin=system.getSkin();
 
-        // if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL)
-        // if (cit->id()==atoi(getenv("VAR1")))
-        // std::cout<<"INT1-"<<system.comm->rank()<<"> "<<getStep()<<" "<<cit->id()<<"
-        // ["<<cit->position()<<"] ("
-        //<<deltaP<<") "<<static_cast<int>(floor(cit->position()[2]/Lz))<<" \n";
+/*if (rename("FLAG_P","FLAG_P")==0 && getenv("VAR1")!=NULL)
+if (cit->id()==atoi(getenv("VAR1")))
+std::cout<<"INT1-"<<system.comm->rank()<<"> "<<getStep()<<" "<<cit->id()<<"["<<cit->position()<<"] ("
+<<deltaP<<") "<<static_cast<int>(floor(cit->position()[2]/Lz))<<" \n";*/
         int itmp = static_cast<int>(floor(cit->position()[2] / Lz));
         if (abs(itmp) > 1)
         {
