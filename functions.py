@@ -70,6 +70,15 @@ def write_h5md(file, system, step, time, record_time, temperature, energy):
     for i in range(len(energy)): energy[i] = round(energy[i],4)
 
     #iterating over all particles
+    conf = espressopp.analysis.Configurations(system)
+    conf.gather()
+    vel = espressopp.analysis.ConfigurationsExt(system)
+    vel.gather()
+
+    print(conf[0][1])
+    print(vel[0][1])
+    sys.exit(0)
+    
     for pid in range(1,max_pid+1):
                 
         particle = system.storage.getParticle(pid)
