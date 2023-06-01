@@ -83,7 +83,8 @@ def write_h5md(file, system, step, time, record_time, temperature, energy):
         v[pid-1, :] = np.array([vel[0][pid][0], vel[0][pid][1], vel[0][pid][2]])
               
         #this if statement detect whether the particle is in the cation or anion molecule and it adds to the corresponding molecule numbers
-        if particle.type not in [10, 11]:
+        #if particle.type not in [10, 11]:
+        if pid <= 6400:
             
             molecule_name = 1#cation
             atom_id_in_molecule = pid - cation_number*len(name_list_cation) - anion_number*len(name_list_anion)            
