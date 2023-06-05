@@ -150,22 +150,22 @@ void VelocityVerletLE::run(int nsteps)
         {
             offs_sav = system.shearOffset;
         }
-/*        else if (getStep() > 0)
+        else if (getStep() > 0)
         {
             real offs = shearRate * Lz * (getStep() + .0) * getTimeStep();
             int xtmp = static_cast<int>(floor(offs / Lx));
             offs_sav = offs - (xtmp + .0) * Lx;
             system.shearOffset = offs_sav;
         }
-*/
         else
             shift_init = false;
 
-        if (shift_init)
+	if (shift_init)
         {
             cshift = static_cast<int>(floor(offs_sav * ngrid / Lx + 0.5));
 //if (system.comm->rank()==0)
-//std::cout<<"CINIT> "<<getStep()<<" "<<offs_sav<<" "<<system.shearOffset<<" \n";
+//std::cout<<"CINIT> "<<getStep()<<" | "<<cshift<<" "<<offs_sav * ngrid / Lx + 0.5
+//<<" "<<offs_sav<<" "<<system.shearOffset<<" \n";
             if (cshift < 0)
                 throw std::runtime_error(
                     "VelocityVerletLE error: Error in initializing remapNeighbourCells for a "
@@ -220,15 +220,16 @@ void VelocityVerletLE::run(int nsteps)
 
         LOG4ESPP_INFO(theLogger, "maxDist = " << maxDist << ", skin/2 = " << skinHalf);
 
-        int ctmp = static_cast<int>(floor(offs_sav +
+        int ctmp = static_cast<int>(floor((offs_sav +
                                           shearRate * static_cast<real>(getStep() - initStep) *
-                                              getTimeStep() * ngrid * Lz / Lx +
+                                              getTimeStep() * Lz) * ngrid / Lx +
                                           0.5));
-        cshift = static_cast<int>(floor(offs_sav +
+        cshift = static_cast<int>(floor((offs_sav +
                                         shearRate * static_cast<real>(getStep() - initStep + 1) *
-                                            getTimeStep() * ngrid * Lz / Lx +
+                                            getTimeStep() * Lz) * ngrid / Lx +
                                         0.5));
-
+//if (system.comm->rank()==0 && i%100==0)
+//std::cout<<"CTMP> "<<getStep()<<" "<<ctmp<<" "<<cshift<<" / "<<shift_count<<" \n";
         if (cshift > ctmp)
         {
             shift_count++;
